@@ -1,0 +1,74 @@
+From 7daa2fa43d0b54263256f3ee96cca87278e0a985 Mon Sep 17 00:00:00 2001
+From: OpenEmbedded <oe.patch@oe>
+Date: Thu, 19 Mar 2020 09:09:14 +0000
+Subject: [PATCH 2/2] Add DESAY Display Support
+
+---
+ drivers/gpu/drm/bridge/synopsys/dw-hdmi.c | 36 ++++++++++++++++++++++++++++++-
+ 1 file changed, 35 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/bridge/synopsys/dw-hdmi.c b/drivers/gpu/drm/bridge/synopsys/dw-hdmi.c
+index cedae37..2cef407 100644
+--- a/drivers/gpu/drm/bridge/synopsys/dw-hdmi.c
++++ b/drivers/gpu/drm/bridge/synopsys/dw-hdmi.c
+@@ -40,6 +40,10 @@
+ 
+ #include <media/cec-notifier.h>
+ 
++#include <drm/drm_modes.h>
++#include <video/videomode.h>
++
++
+ #define DDC_SEGMENT_ADDR	0x30
+ 
+ #define HDMI_EDID_LEN		512
+@@ -2045,7 +2049,7 @@ static int dw_hdmi_connector_get_modes(struct drm_connector *connector)
+ 					     connector);
+ 	struct edid *edid;
+ 	int ret = 0;
+-
++#if 0
+ 	if (!hdmi->ddc)
+ 		return 0;
+ 
+@@ -2063,7 +2067,37 @@ static int dw_hdmi_connector_get_modes(struct drm_connector *connector)
+ 	} else {
+ 		dev_dbg(hdmi->dev, "failed to get edid\n");
+ 	}
++#else
++	struct drm_display_mode *mode;  
++	struct videomode vm;  
++
++	if (!connector || !hdmi) {  
++	 dev_err(hdmi->dev,"connector=%p or hdmi=%p is NULL\n",connector, hdmi);  
++	  return 0;  
++	}  
++
++	vm.pixelclock = 88135920;  
++	vm.hactive = 1920;  
++	vm.hfront_porch = 42;  
++	vm.hback_porch = 42;  
++	vm.hsync_len = 10;  
++	vm.vactive = 720;  
++	vm.vfront_porch = 8;  
++	vm.vback_porch = 5;  
++	vm.vsync_len = 2;  
++	vm.flags = DISPLAY_FLAGS_VSYNC_LOW;  
+ 
++	mode = drm_mode_create(connector->dev);  
++
++	if (mode == NULL)  
++	    return 0;  
++
++	mode->type = DRM_MODE_TYPE_DRIVER;  
++
++	drm_display_mode_from_videomode(&vm, mode);  
++	drm_mode_probed_add(connector, mode); 
++	ret = 1;
++#endif
+ 	return ret;
+ }
+ 
+-- 
+2.7.4
+

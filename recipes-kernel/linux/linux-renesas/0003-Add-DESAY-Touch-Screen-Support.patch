@@ -1,0 +1,2970 @@
+From ac5510fb1f47e38c04992a62658a1566af1363ac Mon Sep 17 00:00:00 2001
+From: OpenEmbedded <oe.patch@oe>
+Date: Fri, 20 Mar 2020 01:47:21 +0000
+Subject: [PATCH 3/3] Add DESAY Touch Screen Support
+
+---
+ arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts |   24 +
+ drivers/input/touchscreen/Kconfig              |    7 +
+ drivers/input/touchscreen/Makefile             |    2 +
+ drivers/input/touchscreen/TI949_drv.c          |  330 +++++
+ drivers/input/touchscreen/bu21013.h            |   45 +
+ drivers/input/touchscreen/bu21013_ts.c         | 1543 +++++++++++++++++++++---
+ drivers/input/touchscreen/bu21013_ts_old.c     |  730 +++++++++++
+ 7 files changed, 2497 insertions(+), 184 deletions(-)
+ create mode 100755 drivers/input/touchscreen/TI949_drv.c
+ create mode 100755 drivers/input/touchscreen/bu21013.h
+ mode change 100644 => 100755 drivers/input/touchscreen/bu21013_ts.c
+ create mode 100644 drivers/input/touchscreen/bu21013_ts_old.c
+
+diff --git a/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts b/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
+index 498f788..d671d1f 100644
+--- a/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
++++ b/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
+@@ -268,3 +268,27 @@
+ &vspi1 {
+ 	status = "okay";
+ };
++
++&i2c2 {
++        status = "okay";
++        clock-frequency = <400000>;
++
++        ti949@0x0c {
++                        compatible = "TI,TI949";
++                        reg = <0x0c>;
++                   };
++
++        bu21013_tp@1a {
++                                        compatible = "rohm,bu21013_tp";
++                                        reg = <0x1a>;
++                                        touch-gpio = <&gpio4 13 0x4>;
++                                        reset-gpio = <&gpio4 14 1>;
++                        //      avdd-supply = <&evm_3v3_sw>;
++                                        rohm,touch-max-x = <1920>;
++                                        rohm,touch-max-y = <720>;
++                                        rohm,flip-y;
++                        };
++
++};
++
++
+diff --git a/drivers/input/touchscreen/Kconfig b/drivers/input/touchscreen/Kconfig
+index 64b30fe..51553f6 100644
+--- a/drivers/input/touchscreen/Kconfig
++++ b/drivers/input/touchscreen/Kconfig
+@@ -1246,4 +1246,11 @@ config TOUCHSCREEN_ROHM_BU21023
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called bu21023_ts.
+ 
++config TI949_DRV
++	tristate "Support DESAY Display Screen"
++	help
++	  Say Y here if you want to support Desay Screen for SVW project
++	
++	  If unsure please contact FangJiawei@csvw.com
++
+ endif
+diff --git a/drivers/input/touchscreen/Makefile b/drivers/input/touchscreen/Makefile
+index 850c156..464ca41 100644
+--- a/drivers/input/touchscreen/Makefile
++++ b/drivers/input/touchscreen/Makefile
+@@ -104,3 +104,5 @@ obj-$(CONFIG_TOUCHSCREEN_ZET6223)	+= zet6223.o
+ obj-$(CONFIG_TOUCHSCREEN_ZFORCE)	+= zforce_ts.o
+ obj-$(CONFIG_TOUCHSCREEN_COLIBRI_VF50)	+= colibri-vf50-ts.o
+ obj-$(CONFIG_TOUCHSCREEN_ROHM_BU21023)	+= rohm_bu21023.o
++
++obj-$(CONFIG_TI949_DRV)		        += TI949_drv.o
+diff --git a/drivers/input/touchscreen/TI949_drv.c b/drivers/input/touchscreen/TI949_drv.c
+new file mode 100755
+index 0000000..a3c628b
+--- /dev/null
++++ b/drivers/input/touchscreen/TI949_drv.c
+@@ -0,0 +1,330 @@
++#include <linux/err.h>
++#include <linux/i2c-mux.h>
++#include <linux/iio/iio.h>
++#include <linux/regmap.h>
++#include <linux/module.h>
++#include <linux/init.h>	
++#include <linux/device.h>
++#include <linux/platform_device.h>
++#include <linux/slab.h>
++#include <linux/uaccess.h>
++#include <linux/input.h>
++#include <linux/of_irq.h>
++#include <linux/of.h>
++#include <linux/interrupt.h>
++#include <linux/i2c.h>
++#include <linux/ioctl.h>
++#include <asm/io.h>
++#include <linux/delay.h>
++
++
++//#include "TI949.h"
++
++//extern int register_test_notifier(struct notifier_block*);
++//extern int unregister_test_notifier(struct notifier_block*);
++int TI949_read_reg_bytes(const struct i2c_client * client,char reg);
++void clear_INTB(void);
++
++/**************************************************************************************/
++
++//设计一个全局的设备对象
++struct ti949_drv{
++	int dev_major;
++	struct device *dev;
++	struct class* cls;
++	struct i2c_client* client;
++};
++
++struct ti949_drv* ti949_dev;
++
++//clear INTB
++/*
++static int CommIICTi949_event(struct notifier_block *this, unsigned long event, void *ptr)
++{
++  printk("Here to clear INTB In CommIICTi949_event : Event Number is %ld\n", event);
++
++  TI949_read_reg_bytes(ti949_dev->client,0xc7);
++
++  return 0; 
++}
++*/
++void clear_INTB(void){
++	
++	//printk("Here to clear INTB\n");
++
++	TI949_read_reg_bytes(ti949_dev->client,0xc7);
++}
++
++
++/*
++static struct notifier_block CommIICTi949_notifier =
++{
++    .notifier_call = CommIICTi949_event,
++};
++*/
++
++
++int TI949_write_bytes(const struct i2c_client * client, char * buf, int count){
++
++	/*
++		TI949_write_bytes(const struct i2c_client * client, const char * buf, int count);
++		函数具体实现如下：
++	*/
++
++	struct i2c_adapter* adapter = client->adapter;
++	struct i2c_msg msg;
++	int ret;
++	msg.addr = client->addr;
++	msg.flags = 0;
++	msg.len = count;
++	msg.buf = buf;
++	
++	ret = i2c_transfer(adapter, &msg,1);
++	//i2c_master_recv(const struct i2c_client * client, char * buf, int count)
++	//printk("write ret = %d\n",ret);
++	return ret == 1?count:ret;
++	
++}
++
++
++
++int TI949_read_bytes(const struct i2c_client * client, char * buf, int count){
++	
++	struct i2c_adapter* adapter = client->adapter;
++	struct i2c_msg msg;
++	int ret;
++	msg.addr = client->addr;
++	msg.flags = 1;
++	msg.len = count;
++	msg.buf = buf;
++	
++	ret = i2c_transfer(adapter, &msg,1);
++
++	return ret == 1?count:ret;
++
++}
++
++//读取某个特定的寄存器的地址，然后将值返回
++int TI949_read_reg_bytes(const struct i2c_client * client,char reg){//reg——要读的寄存器的地址
++
++	//先写寄存器的地址，然后再读寄存器的值
++	struct i2c_adapter* adapter = client->adapter;
++	struct i2c_msg msg[2];
++	int ret;
++	char rxbuf[1];
++
++	/**msg[0]的作用是将要读的寄存器地址写入TI949，所以需要先写，flag == 0**/
++	msg[0].addr = client->addr;
++	msg[0].flags = 0;
++	msg[0].len = 1;
++	msg[0].buf = &reg;
++	/**msg[1]的作用是将寄存器地址中的值读出来放入buf中，所以需要读，flag == 1**/
++	msg[1].addr = client->addr;
++	msg[1].flags = I2C_M_RD;
++	msg[1].len = 1;
++	msg[1].buf = rxbuf;
++	
++	ret = i2c_transfer(adapter, msg, 2);
++	if(ret < 0){
++		printk("read err!\n");
++		return ret;
++	}
++
++	return rxbuf[0];
++}
++
++void debug_read(const struct i2c_client * client,char ctrl_buf[2])
++{
++	int ret;
++
++	printk(KERN_ERR "ret should be 0x%X\n",ctrl_buf[1]);
++	ret = TI949_read_reg_bytes(client,ctrl_buf[0]);
++	printk(KERN_ERR "reg_0x%x = 0x%X.\n",ctrl_buf[0],ret);
++}
++int TI949_open(struct inode *node, struct file *fp){
++	return 0;
++}
++
++long TI949_ioctl(struct file *fp, unsigned int cmd, unsigned long args){
++	
++#if 0
++	union TI949_data data;
++	switch(cmd){
++		case IO_GET_ACC:
++			//读数据
++			data.acc.x = TI949_read_reg_bytes(ti949_dev->client,MPU_ACCEL_XOUTL_REG);
++			data.acc.x |= TI949_read_reg_bytes(ti949_dev->client,MPU_ACCEL_XOUTH_REG) << 8;
++		
++			data.acc.y = TI949_read_reg_bytes(ti949_dev->client,MPU_ACCEL_YOUTL_REG);
++			data.acc.y |= TI949_read_reg_bytes(ti949_dev->client,MPU_ACCEL_YOUTH_REG) << 8;
++			
++			data.acc.z = TI949_read_reg_bytes(ti949_dev->client,MPU_ACCEL_ZOUTL_REG);
++			data.acc.z |= TI949_read_reg_bytes(ti949_dev->client,MPU_ACCEL_ZOUTH_REG) << 8;
++			break;
++		case IO_GET_ARG:
++			data.arg.x = TI949_read_reg_bytes(ti949_dev->client,MPU_GYRO_XOUTL_REG);
++			data.arg.x |= TI949_read_reg_bytes(ti949_dev->client,MPU_GYRO_XOUTH_REG) << 8;
++
++			data.arg.y = TI949_read_reg_bytes(ti949_dev->client,MPU_GYRO_YOUTL_REG);
++			data.arg.y |= TI949_read_reg_bytes(ti949_dev->client,MPU_GYRO_YOUTH_REG) << 8;
++
++			data.arg.z = TI949_read_reg_bytes(ti949_dev->client,MPU_GYRO_ZOUTL_REG);
++			data.arg.z |= TI949_read_reg_bytes(ti949_dev->client,MPU_GYRO_ZOUTH_REG) << 8;
++			break;
++		case IO_GET_TEMP:
++			data.temp = TI949_read_reg_bytes(ti949_dev->client,MPU_TEMP_OUTL_REG);
++			data.temp |= TI949_read_reg_bytes(ti949_dev->client,MPU_TEMP_OUTH_REG);
++			
++			break;
++		default:
++			printk("invald cmd\n");
++			return -EINVAL;
++	}
++
++	//拷贝给应用层：
++	if(copy_to_user((void __user *)args, &data, sizeof(data))>0)
++		return -EFAULT;
++	#endif
++	return 0;
++}
++
++int TI949_release(struct inode *node, struct file *fp){
++
++	return 0;
++}
++
++const struct file_operations TI949_fops={
++	.open = TI949_open,
++	.release = TI949_release,
++	.unlocked_ioctl = TI949_ioctl,
++
++};
++void TI949_hw_init(void){
++	char init_buf[2];
++	char ctrl_buf[2];//前面是TI949的内部地址，后面是需要往里面写的值
++	
++	init_buf[0]=0x03;
++	init_buf[1]=0xda;
++	TI949_write_bytes(ti949_dev->client, init_buf, 2);
++	debug_read(ti949_dev->client, init_buf);
++	mdelay(200);
++	init_buf[0]=0x17;
++	init_buf[1]=0x9E;
++	TI949_write_bytes(ti949_dev->client, init_buf, 2);
++	debug_read(ti949_dev->client, init_buf);
++
++	
++	ctrl_buf[0] = 0x0d;
++	ctrl_buf[1] = 0x03;
++	TI949_write_bytes(ti949_dev->client, ctrl_buf, 2);	
++	debug_read(ti949_dev->client, ctrl_buf);
++	
++	ctrl_buf[0] = 0x0e;
++	ctrl_buf[1] = 0x30;
++	TI949_write_bytes(ti949_dev->client, ctrl_buf, 2);	
++	debug_read(ti949_dev->client, ctrl_buf);
++
++	
++	ctrl_buf[0] = 0x0f;
++	ctrl_buf[1] = 0x03;
++	TI949_write_bytes(ti949_dev->client, ctrl_buf, 2);
++	debug_read(ti949_dev->client, ctrl_buf);
++
++	
++	ctrl_buf[0] = 0xc6;
++	ctrl_buf[1] = 0x21;
++	TI949_write_bytes(ti949_dev->client, ctrl_buf, 2);
++	debug_read(ti949_dev->client, ctrl_buf);
++
++	ctrl_buf[0] = 0xc7;
++	ctrl_buf[1] = 0x01;
++	TI949_write_bytes(ti949_dev->client, ctrl_buf, 2);
++	debug_read(ti949_dev->client, ctrl_buf);
++
++	printk("init OK?\n");
++}
++
++int TI949_drv_probe(struct i2c_client *i2c_client, const struct i2c_device_id *i2c_device_id){
++	/***
++		1.申请设备号，实现fops
++		2.创建设备文件
++		3.通过i2c的接口去初始化i2c从设备
++	***/	
++	int error;
++	ti949_dev = kzalloc(sizeof(struct ti949_drv), GFP_KERNEL);
++	
++	ti949_dev->client = i2c_client;	//i2c设备最重要的部分
++	ti949_dev->dev_major = register_chrdev(0,"ti949_dev", &TI949_fops);
++	ti949_dev->cls = class_create(THIS_MODULE, "ti949_class");
++	ti949_dev->dev = device_create(ti949_dev->cls, NULL, MKDEV(ti949_dev->dev_major, 0), NULL, "ti949_drv");
++	printk(KERN_ERR "%s %s %d \n",__FILE__,__FUNCTION__,__LINE__);
++	/********初始化设备********/
++	TI949_hw_init();
++/*
++	//clear INTB
++	error = register_test_notifier(&CommIICTi949_notifier);	
++	if (error)
++	{
++	  printk("register CommIICTi949_notifier error\n");
++	  return -1; 
++	}
++	printk("register CommIICTi949_notifier completed\n");
++*/
++	
++	return 0;
++}
++
++int TI949_i2c_remove(struct i2c_client *client)
++{
++	device_destroy(ti949_dev->cls, MKDEV(ti949_dev->dev_major, 0));
++	class_destroy(ti949_dev->cls);
++	unregister_chrdev(ti949_dev->dev_major ,"ti949_dev");
++	kfree(ti949_dev);
++	//clear INTB
++	//unregister_test_notifier(&CommIICTi949_notifier);
++	return 0;
++}
++
++const struct of_device_id of_TI949_id[]={
++	{		
++		.compatible = "TI,TI949",
++	},
++	{ /*nothing to be done*/ },
++};
++
++struct i2c_driver TI949_drv={
++	.probe = TI949_drv_probe,
++	.remove = TI949_i2c_remove,
++	.driver = {
++		.name = "TI949_drv",// 随便写，出现在/sys/bus/i2c/driver/TI949_drv
++		.of_match_table = of_match_ptr(of_TI949_id),
++		
++	},
++
++};
++
++
++// 模块安装函数
++static int __init TI949_drv_init(void)
++{	
++	/*编写步骤：
++		1.构建i2c_driver，并注册到i2c总线
++		2.实现probe函数
++	*/	
++
++	return(i2c_add_driver(&TI949_drv));
++}
++
++// 模块卸载函数
++static void __exit TI949_drv_exit(void)
++{
++	i2c_del_driver(&TI949_drv);
++}
++
++
++module_init(TI949_drv_init);
++module_exit(TI949_drv_exit);
++EXPORT_SYMBOL(clear_INTB);
++MODULE_LICENSE("GPL");			
++MODULE_AUTHOR("FangJiawei <fangjiawei@csvw.com>");		// 描述模块的作者
++MODULE_DESCRIPTION("i2c test program");
+diff --git a/drivers/input/touchscreen/bu21013.h b/drivers/input/touchscreen/bu21013.h
+new file mode 100755
+index 0000000..97fb9c2
+--- /dev/null
++++ b/drivers/input/touchscreen/bu21013.h
+@@ -0,0 +1,45 @@
++/*
++ * Copyright (C) ST-Ericsson SA 2010
++ * Author: Naveen Kumar G <naveen.gaddipati@stericsson.com> for ST-Ericsson
++ * License terms:GNU General Public License (GPL) version 2
++ */
++
++#ifndef _BU21013_H
++#define _BU21013_H
++
++/**
++ * struct bu21013_platform_device - Handle the platform data
++ * @touch_x_max: touch x max
++ * @touch_y_max: touch y max
++ * @cs_pin: chip select pin
++ * @touch_pin: touch gpio pin
++ * @ext_clk: external clock flag
++ * @x_flip: x flip flag
++ * @y_flip: y flip flag
++ * @wakeup: wakeup flag
++ *
++ * This is used to handle the platform data
++ */
++struct bu21013_platform_device {
++	int touch_x_max;
++	int touch_y_max;
++	unsigned int cs_pin;
++	unsigned int touch_pin;
++	bool ext_clk;
++	bool x_flip;
++	bool y_flip;
++	bool wakeup;
++};
++
++struct ads_touch_key_data{
++	u16 pos_x;
++	u16 pos_y;
++	u8 status;	
++#ifdef FUNC_PRESSURE_MAJOR_VETOR		
++	u8 area;
++	u8 pressure;
++	u8 vector; 
++#endif	
++};
++
++#endif
+diff --git a/drivers/input/touchscreen/bu21013_ts.c b/drivers/input/touchscreen/bu21013_ts.c
+old mode 100644
+new mode 100755
+index 4fa5da8..d6f425e
+--- a/drivers/input/touchscreen/bu21013_ts.c
++++ b/drivers/input/touchscreen/bu21013_ts.c
+@@ -10,14 +10,34 @@
+ #include <linux/i2c.h>
+ #include <linux/workqueue.h>
+ #include <linux/input.h>
+-#include <linux/input/bu21013.h>
++#include "bu21013.h"
+ #include <linux/slab.h>
+ #include <linux/regulator/consumer.h>
+ #include <linux/module.h>
+ #include <linux/gpio.h>
+ #include <linux/of.h>
+ #include <linux/of_gpio.h>
++#include <linux/input/mt.h>
++#include <asm/bug.h>
+ 
++/*********************************************/
++#include <asm/uaccess.h>
++#include <linux/types.h>
++#include <linux/sched.h>
++#include <linux/notifier.h>
++#include <linux/init.h>
++#include <linux/types.h>
++
++//extern int test_notifier_call_chain(unsigned long val, void *v);
++extern void clear_INTB(void);
++
++static int ads_touch_data_get(const struct i2c_client *client, u8 command, u8 length, u8 *values);
++//static int ads_do_multitouch_screen_report(struct bu21013_ts_data *data);
++//static int ads_button_key_input_report(struct bu21013_ts_data *data, u8 *key_data);
++
++
++
++/*********************************************/
+ #define PEN_DOWN_INTR	0
+ #define MAX_FINGERS	2
+ #define RESET_DELAY	30
+@@ -26,10 +46,10 @@
+ #define MASK_BITS	0x03
+ #define SHIFT_8		8
+ #define SHIFT_2		2
+-#define LENGTH_OF_BUFFER	11
+-#define I2C_RETRY_COUNT	5
++#define LENGTH_OF_BUFFER	8
++#define I2C_RETRY_COUNT	1
+ 
+-#define BU21013_SENSORS_BTN_0_7_REG	0x70
++#define BU21013_SENSORS_BTN_0_7_REG	0x41
+ #define BU21013_SENSORS_BTN_8_15_REG	0x71
+ #define BU21013_SENSORS_BTN_16_23_REG	0x72
+ #define BU21013_X1_POS_MSB_REG		0x73
+@@ -136,6 +156,7 @@
+ 
+ #define DRIVER_TP	"bu21013_tp"
+ 
++
+ /**
+  * struct bu21013_ts_data - touch panel data structure
+  * @client: pointer to the i2c client
+@@ -157,8 +178,137 @@ struct bu21013_ts_data {
+ 	unsigned int irq;
+ 	unsigned int intr_pin;
+ 	bool touch_stopped;
++	bool touch_inited;
++	struct delayed_work work;
++	struct mutex debug_msg_lock;
++	
+ };
+ 
++
++/**
++ * bu21013_read_block_data(): read the touch co-ordinates
++ * @data: bu21013_ts_data structure pointer
++ * @buf: byte pointer
++ *
++ * Read the touch co-ordinates using i2c read block into buffer
++ * and returns integer.
++ */
++static int ads_read_block_data(struct bu21013_ts_data *data,u8 command,u8 length, u8 *buf)
++{
++	int ret, i;
++
++	for (i = 0; i < I2C_RETRY_COUNT; i++) {
++		ret = i2c_smbus_read_i2c_block_data(data->client, command,length, buf);
++		if (ret == length)
++			return 0;
++	}
++
++    //printk(KERN_ERR "ERROR:[%s][%d]\n",__FUNCTION__,__LINE__);
++	return -EINVAL;
++}
++
++static int ads_write_block_data(struct bu21013_ts_data *data,u8 command,u8 length, u8 *buf)
++{
++	int ret, i;
++	u8 *buf_temp = kmalloc(length+2, GFP_KERNEL);
++	u8 sum = 0;
++    if(!buf_temp)
++    {
++		return -ENOMEM;
++	}
++	memcpy(buf_temp,buf,length);
++	
++	*(buf_temp+length)= 0;
++	*(buf_temp+length+1)= sum + command +1;	
++	
++
++	for (i = 0; i < I2C_RETRY_COUNT; i++) {
++		ret = i2c_smbus_write_i2c_block_data(data->client, command,length+2, buf_temp);
++			printk(KERN_EMERG "ERROR:[%s][%d]\n",__FUNCTION__,__LINE__);
++		if (ret == length){
++			kfree(buf_temp);
++			return 0;
++		}
++	}
++	kfree(buf_temp);
++    printk(KERN_EMERG "ERROR:[%s][%d]\n",__FUNCTION__,__LINE__);
++	return -EINVAL;
++}
++
++
++static int ads_cmd_display_startup_done(struct bu21013_ts_data *data)
++{
++	int ret, i;
++    u8 buf[8];
++
++	for (i = 0; i < I2C_RETRY_COUNT; i++) {
++		ret = i2c_smbus_read_i2c_block_data(data->client, 0x40,8, buf);
++		if (ret == 8 && (buf[1] == 0x01))
++			return 0;
++	}
++
++    printk(KERN_ERR "ERROR:[%s][%d]\n",__FUNCTION__,__LINE__);
++	return -EINVAL;
++}
++
++/**
++ * bu21013_read_block_data(): read the touch co-ordinates
++ * @data: bu21013_ts_data structure pointer
++ * @buf: byte pointer
++ *
++ * Read the touch co-ordinates using i2c read block into buffer
++ * and returns integer.
++ */
++static int ads_cmd_function_defect(struct bu21013_ts_data *data)
++{
++	int ret, i;
++    u8 buf[8];
++
++	for (i = 0; i < I2C_RETRY_COUNT; i++) {
++		ret = i2c_smbus_read_i2c_block_data(data->client, 0x48,8, buf);
++		if (ret == 8)
++        {
++            printk(KERN_ERR "Touch:function_defect:");
++
++            for(i=0;i<8;i++)
++            {
++                printk(KERN_ERR "[%02d 0x02%x]",i,buf[i]);
++            }
++            printk(KERN_ERR "\n");
++
++			return 0;
++        }
++	}
++
++    printk(KERN_ERR "ERROR:[%s][%d]\n",__FUNCTION__,__LINE__);
++	return -EINVAL;
++}
++
++
++
++/**
++ * bu21013_read_block_data(): read the touch co-ordinates
++ * @data: bu21013_ts_data structure pointer
++ * @buf: byte pointer
++ *
++ * Read the touch co-ordinates using i2c read block into buffer
++ * and returns integer.
++ */
++static int ads_cmd_MMI_startup_done(struct bu21013_ts_data *data)
++{
++	int ret, i;
++    u8 buf[4]={0x01,0x00,0x00,0x00,0x00,0x82};
++
++	for (i = 0; i < I2C_RETRY_COUNT; i++) {
++		ret = i2c_smbus_write_i2c_block_data(data->client, 0x80,6, buf);
++		if (ret >= 0)
++			return 0;
++	}
++
++    printk(KERN_ERR "ERROR:[%s][%d] ret[%d]\n",__FUNCTION__,__LINE__,ret);
++	return -EINVAL;
++}
++
+ /**
+  * bu21013_read_block_data(): read the touch co-ordinates
+  * @data: bu21013_ts_data structure pointer
+@@ -178,9 +328,53 @@ static int bu21013_read_block_data(struct bu21013_ts_data *data, u8 *buf)
+ 		if (ret == LENGTH_OF_BUFFER)
+ 			return 0;
+ 	}
++
++    printk(KERN_ERR "ERROR:[%s][%d]\n",__FUNCTION__,__LINE__);
+ 	return -EINVAL;
+ }
+ 
++
++static int ti_i2c_read_reg(struct i2c_client *client, u8 reg, u16 len, void *val)
++{
++	struct 	i2c_msg xfer[2];
++	u8 		buf[1];
++	int 	ret;
++	bool 	retry = false;
++
++	buf[0] = reg;
++
++	/* Write register */
++	xfer[0].addr  = client->addr;
++	xfer[0].flags = 0;
++	xfer[0].len   = 1;    //8 bit of register 
++	xfer[0].buf   = buf;
++	
++	/* Read data */
++	xfer[1].addr  = client->addr;
++	xfer[1].flags = I2C_M_RD;
++	xfer[1].len   = len;
++	xfer[1].buf   = val;
++
++retry_read:
++	ret = i2c_transfer(client->adapter, xfer, ARRAY_SIZE(xfer));
++	if (ret != ARRAY_SIZE(xfer)) {
++		if (!retry) {
++			dev_err(&client->dev,"bu21013 : i2c read data retry (%d) \n", ret);
++			msleep(20);
++			retry = true;
++			goto retry_read;
++		} else {
++			dev_err(&client->dev, "bu21013 : %s:i2c read data failed (%d) \n",__func__, ret);
++			return -EIO;
++		}
++	}
++	return 0;
++}
++
++
++
++
++
+ /**
+  * bu21013_do_touch_report(): Get the touch co-ordinates
+  * @data: bu21013_ts_data structure pointer
+@@ -188,226 +382,1023 @@ static int bu21013_read_block_data(struct bu21013_ts_data *data, u8 *buf)
+  * Get the touch co-ordinates from touch sensor registers and writes
+  * into device structure and returns integer.
+  */
+-static int bu21013_do_touch_report(struct bu21013_ts_data *data)
++static int bu21013_do_touch_init(struct bu21013_ts_data *data)
+ {
+ 	u8	buf[LENGTH_OF_BUFFER];
+ 	unsigned int pos_x[2], pos_y[2];
+ 	bool	has_x_sensors, has_y_sensors;
+ 	int	finger_down_count = 0;
+-	int	i;
++	int	i,j;
++    u8 val;
++
+ 
+ 	if (data == NULL)
+ 		return -EINVAL;
+ 
+-	if (bu21013_read_block_data(data, buf) < 0)
+-		return -EINVAL;
++	if (ads_cmd_display_startup_done(data) < 0)
++    {
++        printk(KERN_ERR "ERROR:[%s][%d]\n",__FUNCTION__,__LINE__);
++        return -EINVAL;
++    }
++
++	if (ads_cmd_MMI_startup_done(data) < 0)
++    {
++        printk(KERN_ERR "ERROR:[%s][%d]\n",__FUNCTION__,__LINE__);
++        return -EINVAL;
++    }
++
++	if (ads_cmd_function_defect(data) < 0)
++    {
++        printk(KERN_ERR "ERROR:[%s][%d]\n",__FUNCTION__,__LINE__);
++        return -EINVAL;
++    }
++
++
++    printk(KERN_ERR "TRK:[%s][%d] OK OK OK OK\n",__FUNCTION__,__LINE__);
++
++
++	return 0;
++}
++
++#define MXT_TOUCH_MAJOR_DEFAULT		1
++
++#define MT_1_2_REG 0x41
++#define	MT_OTHER_TOUCHES_REG 0x42
++#define MT_1_2_DATA_LEN 23
++#define MT_FINGER_MAX 2
++#define MT_FINGERS_NUM_POS 1
++#define TOUCH_KEY_REG 0x50
++#define TOUCH_KEY_DATA_LEN 5
++#define TOUCH_KEY_STATUS_OFFSET 2
++#define TOUCH_KEY_ID_OFFSET 1
++#define TOUCH_KEY_ID_VOL_UP 1
++#define TOUCH_KEY_ID_VOL_DN 2
++#define TOUCH_KEY_ID_MUTE 3
++#define VOL_LIGHT_REG 0x92 
++#define LIGHT_MODE_REG 0x91
++#define BACK_LIGHT_REG 0x93 
++
++#define TOUCH_VOL_REG 0x4F
++
++#define MT_STATE_MOVE_BIT (1<<4)
++#define MT_STATE_PRESS_BIT (1<<6)
++#define MT_STATE_RELEASE_BIT (1<<5)
++#define MT_STATE_DETECT_BIT (1<<7)
++
++
++/*this is weird,ads touch read data no need to point reg,
++never no the longth,soc do not need to check the touch ,what a fuck,a group of SB */
++
++struct cmd_type{
++u8 cmd_id;
++u8 data_len;
++u8 reback_id;
++};
++
++struct ads_display_info{
++u8 self_check_result;
++u8 function_status;
++u8 display_status;
++u8 touch_status;
++u8 temp_status;
++u8 lock_sig_status;
++u8 backlight_status;
++u8 bl_on_off_status;
++u8 voltage_status;
++u8 boot_hw_version[6];
++u8 boot_sw_version[6];
++u8 user_hw_version[6];
++u8 user_sw_version[6];
++u8 key_light_mode;
++u8 vol_light_mode;
++u8 backlight_level;
++bool ads_connect_status;
++u8 cmd_key_light_mode;
++u8 cmd_vol_light_mode;
++u8 cmd_backlight_level;
++};
++const struct cmd_type ads_read_ids[7]={
++{0x40,8,0x80},
++{0x48,8,0x81},
++{0x49,8,0x81},
++{0x4B,8,0x81},
++{0x4C,1,0x91},
++{0x4D,1,0x92},
++{0x4E,1,0x93},			
++};
++
++u8 ads_rollback_flag[7]={0};
+ 
+-	has_x_sensors = hweight32(buf[0] & BU21013_SENSORS_EN_0_7);
+-	has_y_sensors = hweight32(((buf[1] & BU21013_SENSORS_EN_8_15) |
+-		((buf[2] & BU21013_SENSORS_EN_16_23) << SHIFT_8)) >> SHIFT_2);
+-	if (!has_x_sensors || !has_y_sensors)
+-		return 0;
+-
+-	for (i = 0; i < MAX_FINGERS; i++) {
+-		const u8 *p = &buf[4 * i + 3];
+-		unsigned int x = p[0] << SHIFT_2 | (p[1] & MASK_BITS);
+-		unsigned int y = p[2] << SHIFT_2 | (p[3] & MASK_BITS);
+-		if (x == 0 || y == 0)
+-			continue;
+-		pos_x[finger_down_count] = x;
+-		pos_y[finger_down_count] = y;
+-		finger_down_count++;
+-	}
+-
+-	if (finger_down_count) {
+-		if (finger_down_count == 2 &&
+-		    (abs(pos_x[0] - pos_x[1]) < DELTA_MIN ||
+-		     abs(pos_y[0] - pos_y[1]) < DELTA_MIN)) {
++static int set_need_rollback_flag(u8 id)
++{
++	int i; 
++    for(i=0;i<7;i++){
++		if(ads_read_ids[i].reback_id == id)
++		{
++			ads_rollback_flag[i]= 1;
+ 			return 0;
+ 		}
++   }
++	return -1;
++}
++
++static int clr_need_rollback_flag(u8 id)
++{
++	int i; 
++    for(i=0;i<7;i++){
++		if(ads_read_ids[i].cmd_id== id)
++		{
++			ads_rollback_flag[i]= 0;
++			return 0;
++		}
++   }
++	return -1;
++}
+ 
+-		for (i = 0; i < finger_down_count; i++) {
+-			if (data->chip->x_flip)
+-				pos_x[i] = data->chip->touch_x_max - pos_x[i];
+-			if (data->chip->y_flip)
+-				pos_y[i] = data->chip->touch_y_max - pos_y[i];
+-
+-			input_report_abs(data->in_dev,
+-					 ABS_MT_POSITION_X, pos_x[i]);
+-			input_report_abs(data->in_dev,
+-					 ABS_MT_POSITION_Y, pos_y[i]);
+-			input_mt_sync(data->in_dev);
++static int get_rollback_flag(u8 id)
++{
++	int i; 
++    for(i=0;i<7;i++){
++		if(ads_read_ids[i].reback_id== id)
++		{
++			return ads_rollback_flag[i];
+ 		}
+-	} else
+-		input_mt_sync(data->in_dev);
++   }
++	return -1;
++}
+ 
+-	input_sync(data->in_dev);
++struct ads_display_info ads_infos;
++#define idnum (sizeof(ads_read_ids)/sizeof(cmd_type))
++
++static int ads_info_handle(u8 *data,struct bu21013_ts_data *sdata)
++{
++	u8 i;
++	if(!data)
++		return -1;
++	clr_need_rollback_flag(data[0]);
++  /****************F.JW test***********************/
++	//printk("data[0] = 0x %x\n",data[0]);
++  /************************************************/
++	switch(data[0]){
++		case 0x40:
++			ads_infos.self_check_result=data[1];
++			if(ads_infos.self_check_result)
++				ads_cmd_MMI_startup_done(sdata);
++			break;
++		case 0x48:
++			ads_infos.function_status=data[1];
++			ads_infos.display_status=data[2];
++			ads_infos.touch_status=data[3];
++			ads_infos.temp_status=data[4];
++			ads_infos.lock_sig_status=data[5];
++			ads_infos.backlight_status=data[6];
++			ads_infos.bl_on_off_status=data[7];
++			
++			break;
++			
++		case 0x49:
++			/*diag reversed,so change here*/
++			if(data[1] == 1)
++				ads_infos.voltage_status=2;
++			else if(data[1] == 2)
++				ads_infos.voltage_status=1;
++			else
++				ads_infos.voltage_status=data[1];
++			break;
++		case 0x4B:
++			if(data[5]){
++				sprintf(ads_infos.boot_hw_version,"%02d%s%02d",data[1],".",data[2]);
++				sprintf(ads_infos.boot_sw_version,"%02d%s%02d",data[3],".",data[4]);
++				ads_infos.boot_sw_version[5]=0;
++				ads_infos.boot_hw_version[5]=0;
++			}else{
++				sprintf(ads_infos.user_hw_version,"%02d%s%02d",data[1],".",data[2]);
++				sprintf(ads_infos.user_sw_version,"%02d%s%02d",data[3],".",data[4]);
++				ads_infos.user_hw_version[5]=0;
++				ads_infos.user_sw_version[5]=0;
++			}
++			break;
++		case 0x4C:
++			ads_infos.key_light_mode=data[1];
++			break;
++		case 0x4D:
++			ads_infos.vol_light_mode=data[1];
++			break;
++		case 0x4E:
++			ads_infos.backlight_level=data[1];
++			break;
++		default:
++			return -1;
+ 
++	}
+ 	return 0;
+ }
+-/**
+- * bu21013_gpio_irq() - gpio thread function for touch interrupt
+- * @irq: irq value
+- * @device_data: void pointer
+- *
+- * This gpio thread function for touch interrupt
+- * and returns irqreturn_t.
+- */
+-static irqreturn_t bu21013_gpio_irq(int irq, void *device_data)
++
++static void ads_ts_screen_status_reset(void)
++{
++	ads_infos.function_status=0;
++	ads_infos.display_status=0;
++	ads_infos.touch_status=0;
++	ads_infos.temp_status=0;
++	ads_infos.lock_sig_status=0;
++	ads_infos.backlight_status=0;
++	ads_infos.bl_on_off_status=0;
++	ads_infos.voltage_status=0;
++
++}
++static int ads_info_init(void)
+ {
+-	struct bu21013_ts_data *data = device_data;
+-	struct i2c_client *i2c = data->client;
+-	int retval;
+ 
+-	do {
+-		retval = bu21013_do_touch_report(data);
+-		if (retval < 0) {
+-			dev_err(&i2c->dev, "bu21013_do_touch_report failed\n");
+-			return IRQ_NONE;
++	ads_infos.ads_connect_status=false;
++	ads_infos.cmd_key_light_mode=-1;
++	ads_infos.cmd_vol_light_mode=-1;
++	ads_infos.cmd_backlight_level=-1;
++	ads_ts_screen_status_reset();
++
++}
++
++static int ads_button_key_input_report(struct bu21013_ts_data *data, u8 *key_data)
++{
++	u8 ret;
++	u8 key_id;
++    if(!key_data)
++		return -1;
++	
++	if(key_data[TOUCH_KEY_STATUS_OFFSET] & MT_STATE_DETECT_BIT)
++    {
++       
++		if(key_data[TOUCH_KEY_ID_OFFSET] == TOUCH_KEY_ID_VOL_UP){
++			key_id = KEY_VOLUMEUP;
+ 		}
++		else if (key_data[TOUCH_KEY_ID_OFFSET] == TOUCH_KEY_ID_VOL_DN){
++			key_id = KEY_VOLUMEDOWN;
++		}
++		else if (key_data[TOUCH_KEY_ID_OFFSET] == TOUCH_KEY_ID_MUTE){
++			key_id = KEY_MUTE;
++		}
++		else
++			return 0;
++	
++		input_report_key(data->in_dev, key_id, key_data[TOUCH_KEY_STATUS_OFFSET]&MT_STATE_PRESS_BIT ? 1:0);
++	    input_sync(data->in_dev);
++	}	
++	return 0;
+ 
+-		data->intr_pin = gpio_get_value(data->chip->touch_pin);
+-		if (data->intr_pin == PEN_DOWN_INTR)
+-			wait_event_timeout(data->wait, data->touch_stopped,
+-					   msecs_to_jiffies(2));
+-	} while (!data->intr_pin && !data->touch_stopped);
++}
+ 
+-	return IRQ_HANDLED;
++static int ads_button_volkey_slide_input_report(struct bu21013_ts_data *data, u8 *key_data)
++{
++	u8 ret;
++	u8 key_id;
++    if(!key_data)
++		return -1;
++	
++	if(key_data[TOUCH_KEY_STATUS_OFFSET] & MT_STATE_DETECT_BIT)
++    {	
++		if((key_data[TOUCH_KEY_STATUS_OFFSET] & MT_STATE_PRESS_BIT)||(key_data[TOUCH_KEY_STATUS_OFFSET] & MT_STATE_MOVE_BIT)){
++			input_report_abs(data->in_dev, ABS_X, 2000);
++			input_report_abs(data->in_dev, ABS_Y, key_data[3]);
++			input_report_key(data->in_dev, BTN_TOUCH, 1);
++			input_sync(data->in_dev);
++		}else if(key_data[TOUCH_KEY_STATUS_OFFSET] & MT_STATE_RELEASE_BIT){
++			input_report_key(data->in_dev, BTN_TOUCH, 0);
++			input_sync(data->in_dev);
++		}
++		
++	}	
++	return 0;
+ }
+ 
++static int ads_touch_key_input_report(struct bu21013_ts_data *data,u8 key_count, u8 *key_data_raw)
++{
++	int i,j;
++	struct ads_touch_key_data key_data[5];
++	static u8 prev_key_status[10]={0};
++	u8 touch_sync=0;
++	
++	for(j=0;j<key_count;j++){
++			key_data[j].pos_x = key_data_raw[j*9+2]*0xFF + key_data_raw[j*9+3];
++			key_data[j].pos_y = key_data_raw[j*9+4]*0xFF + key_data_raw[j*9+5];
++			key_data[j].status = key_data_raw[j*9+1];
++#ifdef FUNC_PRESSURE_MAJOR_VETOR		
++			key_data[j].area = key_data_raw[j*9+6];
++			key_data[j].pressure = key_data_raw[j*9+7];
++			key_data[j].vector = key_data_raw[j*9+8]; 
++#endif	
++	 }
++	for(i=0;i < key_count;i++)
++    {
++		if((key_data[i].status &MT_STATE_DETECT_BIT)||(key_data[i].status & MT_STATE_RELEASE_BIT))
++        {
++			if(((prev_key_status[i] != 1) && (key_data[i].status & MT_STATE_PRESS_BIT))\
++				|| (key_data[i].status & MT_STATE_MOVE_BIT))			
++            {						
++						input_mt_slot(data->in_dev, i);
++						input_mt_report_slot_state(data->in_dev, 0, 1);
++						if((prev_key_status[i] != 1) && (key_data[i].status & MT_STATE_PRESS_BIT)){
++							input_report_key(data->in_dev, BTN_TOUCH, 1);
++							prev_key_status[i] = 1;
++						}
++						input_report_abs(data->in_dev, ABS_MT_POSITION_X,key_data[i].pos_x);
++						input_report_abs(data->in_dev, ABS_MT_POSITION_Y,key_data[i].pos_y);
++						
++#ifdef FUNC_PRESSURE_MAJOR_VETOR		
++						input_report_abs(data->in_dev, ABS_MT_TOUCH_MAJOR, key_data[i].area);		
++						input_report_abs(data->in_dev, ABS_MT_PRESSURE, key_data[i].pressure);
++						input_report_abs(data->in_dev, ABS_MT_ORIENTATION, key_data[i].vector);
++#endif		
++
++                        touch_sync=1;
++			}
++
++            else if(key_data[i].status & MT_STATE_RELEASE_BIT)
++            {
++                if(prev_key_status[i] == 1)
++                {
++                	input_mt_slot(data->in_dev, i);
++                	input_mt_report_slot_state(data->in_dev, 0, 0);
++                	input_report_key(data->in_dev, BTN_TOUCH, 0);				
++                	prev_key_status[i] = 0;
++                    touch_sync=1;
++                }
++                if(key_count == 1)
++                {
++                    for(j=0;j<5;j++)
++                    {
++                    	input_mt_slot(data->in_dev, j);
++                    	input_mt_report_slot_state(data->in_dev, 0, 0);
++                    	input_report_key(data->in_dev, BTN_TOUCH, 0);				
++                    	prev_key_status[j] = 0;
++                        touch_sync=1;
++                    }
++                }
++			}
++
++		}
++	}
++
++    if(touch_sync==1)
++    {
++        input_sync(data->in_dev);
++        touch_sync=0;
++    }
++
++}
++
++
++static int TI949_read_bytes(const struct i2c_client * client, unsigned char * buf, int count){
++	
++	struct i2c_adapter* adapter = client->adapter;
++	struct i2c_msg msg;
++	int ret;
++	msg.addr = client->addr;
++	msg.flags = I2C_M_RD;
++	msg.len = count;
++	msg.buf = buf;
++	
++	ret = i2c_transfer(adapter, &msg,1);
++
++	return ret == 1?count:ret;
++
++}
++
++static u8 ads_interuppt_data_read_svw(struct i2c_client *client)
++{
++	struct i2c_adapter* adapter = client->adapter;
++	struct i2c_msg msg;
++	int ret;
++	u8 rxbuf;
++
++	msg.addr = client->addr;
++	msg.flags = I2C_M_RD;
++	msg.len = 1;
++	msg.buf = &rxbuf;
++	
++	ret = i2c_transfer(adapter,&msg, 1);
++	if(ret < 0){
++		printk("read err!\n");
++	
++	return rxbuf;
++	
++}
++}
++static int ads_interuppt_data_read(struct i2c_client *client,u16 len, u8 *val)
++{
++	#if 1
++	struct 	i2c_msg xfer[1];
++	int 	ret;
++	bool 	retry = false;
++	int i;
++	u8 rxbuf[1];
++	
++		/* Read data */
++		xfer[0].addr  = client->addr;
++		xfer[0].flags = I2C_M_RD;
++		xfer[0].len   = 1;
++		xfer[0].buf   = rxbuf;
++		//printk("###svw_test###i2c_address = 0x%x###svw_test###\n",xfer[0].addr);
++		ret = i2c_transfer(client->adapter,xfer,1);
++		//*(val + i) = rxbuf[i];
++		//printk("rxbuf[%d] = 0x%x\n",i,rxbuf[i]);//val[i]
++	
++	return rxbuf[0];
++	#else
++	struct  i2c_msg xfer[1];
++	 int  ret;
++
++	 while (len > 0) {
++	  /* Read data */
++	  xfer[0].addr  = client->addr;
++	  xfer[0].flags = I2C_M_RD;
++	  xfer[0].len   = 1;
++	  xfer[0].buf   = val;
++
++	  ret = i2c_transfer(client->adapter, xfer, ARRAY_SIZE(xfer));
++	  if (ret != ARRAY_SIZE(xfer))
++	   return -1;
++
++	  len -= 1;
++	  val += 1;
++	 }
++	 
++	 return 1;
++#endif
++
++}
++static int ads_data_read_handle(struct bu21013_ts_data *data)
++{
++  	
++   unsigned char rcv_data[50] ={0}; 
++   int i;
++   int ret;
++/*
++	//ret = TI949_read_bytes(data->client, rcv_data, MT_1_2_DATA_LEN);
++	printk("####svw##TI949_read_bytes = %d\n\n",ret);
++    for(i = 0;i<50;i++){
++   	printk("rcv_data[%d] = 0x%x\n",i,rcv_data[i]);
++   }
++*/
++   #if 0
++   ret = ads_interuppt_data_read(data->client,MT_1_2_DATA_LEN,rcv_data);
++   if(!ret)
++   	return -1;
++	#else
++	
++   memset(rcv_data,0,MT_1_2_DATA_LEN);
++	ret = ads_touch_data_get(data->client, MT_1_2_REG,MT_1_2_DATA_LEN,rcv_data);
++	 for(i = 0;i<50;i++){
++   	printk("rcv_data[%d] = 0x%x\n",i,rcv_data[i]);
++   }
++   #endif
++   
++   if(MT_1_2_REG == rcv_data[0])
++   {
++	 int key_count = rcv_data[MT_FINGERS_NUM_POS]>5? 5: rcv_data[MT_FINGERS_NUM_POS] ;
++	 int key_data_raw[45];
++	 memcpy(key_data_raw,rcv_data+2,18);
++	 if(key_count>2)
++	 {	
++	 	ads_interuppt_data_read(data->client,(key_count-2)*9+3,rcv_data);
++		memcpy(key_data_raw,rcv_data+1,(key_count-2)*9);
++	 }
++	 return ads_touch_key_input_report(data,key_count,(u8*)key_data_raw); 
++   }
++   else if(TOUCH_KEY_REG == rcv_data[0]){
++	 return ads_button_key_input_report(data,rcv_data);
++   }else if(TOUCH_VOL_REG == rcv_data[0]){
++	 /*geely cancel the function,so del it*/
++	// return ads_button_volkey_slide_input_report(data,rcv_data);
++   }
++   
++   
++   
++   return ads_info_handle(rcv_data,data);
++
++}
++
++
++
+ /**
+- * bu21013_init_chip() - power on sequence for the bu21013 controller
+- * @data: device structure pointer
++ * ads_do_touch_screen_report(): Get the touch co-ordinates
++ * @data: bu21013_ts_data structure pointer
+  *
+- * This function is used to power on
+- * the bu21013 controller and returns integer.
++ * Get the touch co-ordinates from touch sensor registers and writes
++ * into device structure and returns integer.
+  */
+-static int bu21013_init_chip(struct bu21013_ts_data *data)
++static int ads_touch_data_get(const struct i2c_client *client, u8 command,
++				  u8 length, u8 *values)
+ {
+-	int retval;
+-	struct i2c_client *i2c = data->client;
+-
+-	retval = i2c_smbus_write_byte_data(i2c, BU21013_RESET_REG,
+-					BU21013_RESET_ENABLE);
+-	if (retval < 0) {
+-		dev_err(&i2c->dev, "BU21013_RESET reg write failed\n");
+-		return retval;
++   /*start+address+CMD_ID+data[n]+EXT_length+checksum+stop*/
++   /*checksum = CMD_ID+data1+....+dataN + EXT_length +1*/  
++   	int	i,j,ret,checksum=0;
++    if(!values)
++		return -ENOMEM;
++	for (i = 0; i < I2C_RETRY_COUNT; i++) {
++		ret = i2c_smbus_read_i2c_block_data(client, command,length,values);
++		if (ret < 0 )
++        {
++            printk(KERN_ERR "ERROR:[%s][%d]\n",__FUNCTION__,__LINE__);
++            return -EIO;
++        }
++	
++		 for(j = 0;j < length; j++){	
++			if(j< length-1)
++			{
++				checksum += values[j];
++			}
++		}
++		if(values[length-1] == checksum+1){	
++			return 0;
++		}
+ 	}
+-	msleep(RESET_DELAY);
++	return -EINVAL;
++}
+ 
+-	retval = i2c_smbus_write_byte_data(i2c, BU21013_SENSOR_0_7_REG,
+-					BU21013_SENSORS_EN_0_7);
+-	if (retval < 0) {
+-		dev_err(&i2c->dev, "BU21013_SENSOR_0_7 reg write failed\n");
+-		return retval;
+-	}
++static ssize_t ads_ts_screen_status_show(struct device *dev,
++				   struct device_attribute *attr, char *buf)
++{	
++	return scnprintf(buf, 180, "self_check_result:%d\n function_status:%d\n display_status:%d\n touch_status:%d\n temp_status :%d\n voltage_status:%d\n ",
++		ads_infos.self_check_result,ads_infos.function_status,ads_infos.display_status,ads_infos.touch_status,ads_infos.temp_status,ads_infos.voltage_status);
++}
+ 
+-	retval = i2c_smbus_write_byte_data(i2c, BU21013_SENSOR_8_15_REG,
+-						BU21013_SENSORS_EN_8_15);
+-	if (retval < 0) {
+-		dev_err(&i2c->dev, "BU21013_SENSOR_8_15 reg write failed\n");
+-		return retval;
+-	}
+ 
+-	retval = i2c_smbus_write_byte_data(i2c, BU21013_SENSOR_16_23_REG,
+-						BU21013_SENSORS_EN_16_23);
+-	if (retval < 0) {
+-		dev_err(&i2c->dev, "BU21013_SENSOR_16_23 reg write failed\n");
+-		return retval;
+-	}
++static ssize_t ads_ts_fw_version_show(struct device *dev,
++				   struct device_attribute *attr, char *buf)
++{	
++	return scnprintf(buf, 180, "self_check_result:%d\n function_status:%d\n display_status:%d\n touch_status:%d\n temp_status :%d\n voltage_status:%d\n ",
++		ads_infos.self_check_result,ads_infos.function_status,ads_infos.display_status,ads_infos.touch_status,ads_infos.temp_status,ads_infos.voltage_status);
++}
+ 
+-	retval = i2c_smbus_write_byte_data(i2c, BU21013_POS_MODE1_REG,
+-				(BU21013_POS_MODE1_0 | BU21013_POS_MODE1_1));
+-	if (retval < 0) {
+-		dev_err(&i2c->dev, "BU21013_POS_MODE1 reg write failed\n");
+-		return retval;
+-	}
++/* Hardware Version is returned as FamilyID.VariantID */
++static ssize_t ads_ts_hw_version_show(struct device *dev,
++				   struct device_attribute *attr, char *buf)
++{
++		
++	return scnprintf(buf, 200, "boot_hw_version:%s\n boot_sw_version:%s\n user_hw_version:%s\n user_sw_version:%s\n",
++		ads_infos.boot_hw_version,ads_infos.boot_sw_version,ads_infos.user_hw_version,ads_infos.user_sw_version);
++}
+ 
+-	retval = i2c_smbus_write_byte_data(i2c, BU21013_POS_MODE2_REG,
+-			(BU21013_POS_MODE2_ZERO | BU21013_POS_MODE2_AVG1 |
+-			BU21013_POS_MODE2_AVG2 | BU21013_POS_MODE2_EN_RAW |
+-			BU21013_POS_MODE2_MULTI));
+-	if (retval < 0) {
+-		dev_err(&i2c->dev, "BU21013_POS_MODE2 reg write failed\n");
+-		return retval;
+-	}
++static ssize_t ads_ts_light_volume_show(struct device *dev,
++				   struct device_attribute *attr, char *buf)
++{
++	return scnprintf(buf, 2, "%d!\n",ads_infos.vol_light_mode);
++}
+ 
+-	if (data->chip->ext_clk)
+-		retval = i2c_smbus_write_byte_data(i2c, BU21013_CLK_MODE_REG,
+-			(BU21013_CLK_MODE_EXT | BU21013_CLK_MODE_CALIB));
+-	else
+-		retval = i2c_smbus_write_byte_data(i2c, BU21013_CLK_MODE_REG,
+-			(BU21013_CLK_MODE_DIV | BU21013_CLK_MODE_CALIB));
+-	if (retval < 0) {
+-		dev_err(&i2c->dev, "BU21013_CLK_MODE reg write failed\n");
+-		return retval;
++static ssize_t ads_ts_light_volume_store(struct device *dev,
++	struct device_attribute *attr, const char *buf, size_t count)
++{
++	struct bu21013_ts_data *data = dev_get_drvdata(dev);
++	
++	u8 i,j;
++	ssize_t ret;
++
++	u8 buf_temp[3]={0,0,0};
++	if (kstrtou8(buf, 0, &i) == 0 && i < 9) {
++		ads_infos.cmd_vol_light_mode = i;
++		buf_temp[0]=i;
++		buf_temp[1]=0;
++		buf_temp[2]=VOL_LIGHT_REG + i+1;
++		set_need_rollback_flag(VOL_LIGHT_REG);
++		mutex_lock(&data->debug_msg_lock);
++		for(j=0;j<5;j++)
++		{
++			i2c_smbus_write_i2c_block_data(data->client,VOL_LIGHT_REG,3,buf_temp);
++			msleep(30);
++			if(get_rollback_flag(VOL_LIGHT_REG)== 0)
++			{
++				break;
++			}
++		}
++		ret = count;
++		mutex_unlock(&data->debug_msg_lock);
++	} else {
++		dev_dbg(dev, "debug_enabled write error\n");
++		ret = -EINVAL;
+ 	}
+ 
+-	retval = i2c_smbus_write_byte_data(i2c, BU21013_IDLE_REG,
+-				(BU21013_IDLET_0 | BU21013_IDLE_INTERMIT_EN));
+-	if (retval < 0) {
+-		dev_err(&i2c->dev, "BU21013_IDLE reg write failed\n");
+-		return retval;
+-	}
++	return ret;
++}
+ 
+-	retval = i2c_smbus_write_byte_data(i2c, BU21013_INT_MODE_REG,
+-						BU21013_INT_MODE_LEVEL);
+-	if (retval < 0) {
+-		dev_err(&i2c->dev, "BU21013_INT_MODE reg write failed\n");
+-		return retval;
+-	}
++static ssize_t ads_ts_light_mode_show(struct device *dev,
++				   struct device_attribute *attr, char *buf)
++{
++	return scnprintf(buf, 2, "%d\n",ads_infos.key_light_mode);
++}
+ 
+-	retval = i2c_smbus_write_byte_data(i2c, BU21013_FILTER_REG,
+-						(BU21013_DELTA_0_6 |
+-							BU21013_FILTER_EN));
+-	if (retval < 0) {
+-		dev_err(&i2c->dev, "BU21013_FILTER reg write failed\n");
+-		return retval;
++static ssize_t ads_ts_light_mode_store(struct device *dev,
++	struct device_attribute *attr, const char *buf, size_t count)
++{
++	struct bu21013_ts_data *data = dev_get_drvdata(dev);
++	
++	u8 i,j;
++	ssize_t ret;
++
++	u8 buf_temp[3]={0,0,0};
++	if (kstrtou8(buf, 0, &i) == 0 && i < 2) {
++		ads_infos.cmd_key_light_mode= i;
++		buf_temp[0]=i;
++		buf_temp[1]=0;
++		buf_temp[2]=LIGHT_MODE_REG + i+1;
++		set_need_rollback_flag(LIGHT_MODE_REG);
++		mutex_lock(&data->debug_msg_lock);
++		for(j=0;j<5;j++)
++		{
++			i2c_smbus_write_i2c_block_data(data->client,LIGHT_MODE_REG,3,buf_temp);
++			msleep(30);
++			if(get_rollback_flag(LIGHT_MODE_REG)== 0)
++			{
++				break;
++			}
++		}
++		ret = count;
++		mutex_unlock(&data->debug_msg_lock);
++	} else {
++		dev_dbg(dev, "debug_enabled write error\n");
++		ret = -EINVAL;
+ 	}
+ 
+-	retval = i2c_smbus_write_byte_data(i2c, BU21013_TH_ON_REG,
+-					BU21013_TH_ON_5);
+-	if (retval < 0) {
+-		dev_err(&i2c->dev, "BU21013_TH_ON reg write failed\n");
+-		return retval;
+-	}
++	return ret;
++}
+ 
+-	retval = i2c_smbus_write_byte_data(i2c, BU21013_TH_OFF_REG,
+-				BU21013_TH_OFF_4 | BU21013_TH_OFF_3);
+-	if (retval < 0) {
+-		dev_err(&i2c->dev, "BU21013_TH_OFF reg write failed\n");
+-		return retval;
++static void bu21013_cs_enable(struct bu21013_ts_data *bu21013_data);
++static void bu21013_cs_disable(struct bu21013_ts_data *bu21013_data);
++
++static ssize_t ads_tft_wakeup_en_store(struct device *dev,
++	struct device_attribute *attr, const char *buf, size_t count)
++{
++	struct bu21013_ts_data *data = dev_get_drvdata(dev);
++	
++	u8 i,j;
++	ssize_t ret;
++
++	u8 buf_temp[3]={0,0,0};
++	if (kstrtou8(buf, 0, &i) == 0 && i < 2) {
++		if(i){
++			//bu21013_cs_enable(data);
++		}else{
++			//bu21013_cs_disable(data);
++		}	
++		ret = i;
++	} else {
++		dev_dbg(dev, "debug_enabled write error\n");
++		ret = -EINVAL;
+ 	}
+ 
+-	retval = i2c_smbus_write_byte_data(i2c, BU21013_GAIN_REG,
+-					(BU21013_GAIN_0 | BU21013_GAIN_1));
+-	if (retval < 0) {
+-		dev_err(&i2c->dev, "BU21013_GAIN reg write failed\n");
+-		return retval;
++	return ret;
++}
++
++static ssize_t ads_ts_backlight_level_show(struct device *dev,
++				   struct device_attribute *attr, char *buf)
++{
++	return scnprintf(buf, 2, "%d\n",ads_infos.backlight_level);
++}
++
++static ssize_t ads_ts_connect_status_show(struct device *dev,
++				   struct device_attribute *attr, char *buf)
++{
++	return scnprintf(buf, 2, "%d\n",ads_infos.ads_connect_status);
++}
++
++static ssize_t ads_ts_backlight_level_store(struct device *dev,
++	struct device_attribute *attr, const char *buf, size_t count)
++{
++	struct bu21013_ts_data *data = dev_get_drvdata(dev);
++	
++	u8 i,j;
++	ssize_t ret;
++
++	u8 buf_temp[3]={0,0,0};
++	if (kstrtou8(buf, 0, &i) == 0 && i < 11) {
++		ads_infos.cmd_backlight_level= i;
++		buf_temp[0]=i;
++		buf_temp[1]=0;
++		buf_temp[2]=BACK_LIGHT_REG + i+1;
++		set_need_rollback_flag(BACK_LIGHT_REG);
++		mutex_lock(&data->debug_msg_lock);
++		for(j=0;j<5;j++)
++		{
++			i2c_smbus_write_i2c_block_data(data->client,BACK_LIGHT_REG,3,buf_temp);
++			msleep(30);
++			if(get_rollback_flag(BACK_LIGHT_REG)== 0)
++			{
++				break;
++			}
++		}
++		ret = count;
++		mutex_unlock(&data->debug_msg_lock);
++	} else {
++		dev_dbg(dev, "debug_enabled write error\n");
++		ret = -EINVAL;
+ 	}
+ 
+-	retval = i2c_smbus_write_byte_data(i2c, BU21013_OFFSET_MODE_REG,
+-					BU21013_OFFSET_MODE_DEFAULT);
+-	if (retval < 0) {
+-		dev_err(&i2c->dev, "BU21013_OFFSET_MODE reg write failed\n");
+-		return retval;
++	return ret;
++}
++
++static ssize_t ads_ts_status_show(struct device *dev,
++				   struct device_attribute *attr, char *buf)
++{
++
++	return scnprintf(buf, 20, "%02x%02x%02x%02x%02x%02x%02x",ads_infos.voltage_status,\
++														ads_infos.display_status,\
++														ads_infos.touch_status,\
++														ads_infos.temp_status,\
++														ads_infos.lock_sig_status,\
++														ads_infos.backlight_status,\
++														ads_infos.bl_on_off_status);
++}
++
++#if 0
++static __ATTR(ads_status, S_IRUGO, ads_ts_status_show, NULL);
++static __ATTR(fw_version, S_IRUGO, ads_ts_fw_version_show, NULL);
++static __ATTR(hw_version, S_IRUGO, ads_ts_hw_version_show, NULL);
++static __ATTR(light_volume, 0666, ads_ts_light_volume_show,
++		ads_ts_light_volume_store);
++static __ATTR(light_mode, 0666, ads_ts_light_mode_show,
++		ads_ts_light_mode_store);
++static __ATTR(back_light, 0666, ads_ts_backlight_level_show,
++		ads_ts_backlight_level_store);
++static __ATTR(tft_wakeup_en, 0666, NULL,ads_tft_wakeup_en_store);
++static __ATTR(connect_status, S_IRUGO, ads_ts_connect_status_show, NULL);
++
++
++static struct attribute *ads_ts_attrs[] = {
++	&dev_attr_fw_version.attr,
++	&dev_attr_hw_version.attr,
++	&dev_attr_light_volume.attr,
++	&dev_attr_light_mode.attr,
++	&dev_attr_back_light.attr,
++	&dev_attr_tft_wakeup_en.attr,
++	&dev_attr_connect_status.attr,
++	&dev_attr_ads_status.attr,
++	NULL
++};
++
++static const struct attribute_group ads_ts_attr_group = {
++	.attrs = ads_ts_attrs,
++};
++#endif
++
++static int ads_ts_sysfs_init(struct bu21013_ts_data *data)
++{
++	#if 0
++	struct i2c_client *client = data->client;
++	int error;
++
++	error = sysfs_create_group(&client->dev.kobj, &ads_ts_attr_group);
++	if (error) {
++		//dev_err(&client->dev, "Failure %d creating sysfs group\n",
++		//	error);
++		return error;
+ 	}
+ 
+-	retval = i2c_smbus_write_byte_data(i2c, BU21013_XY_EDGE_REG,
+-				(BU21013_X_EDGE_0 | BU21013_X_EDGE_2 |
+-				BU21013_Y_EDGE_1 | BU21013_Y_EDGE_3));
+-	if (retval < 0) {
+-		dev_err(&i2c->dev, "BU21013_XY_EDGE reg write failed\n");
+-		return retval;
++
++	return 0;
++
++err_remove_sysfs_group:
++	sysfs_remove_group(&client->dev.kobj, &ads_ts_attr_group);
++	return error;
++	#endif
++}
++
++
++static int ads_do_touch_screen_report(struct bu21013_ts_data *data)
++{
++    u8 mt_data[MT_1_2_DATA_LEN];
++	u8 ret,key_count,ret_len,i,j;
++	struct ads_touch_key_data * key_data;
++	u8 *buf_extern;
++	static u8 prev_key_status[10]={0};
++    u8 touch_sync=0;
++
++	memset(mt_data,0,MT_1_2_DATA_LEN);
++	ret = ads_touch_data_get(data->client, MT_1_2_REG,MT_1_2_DATA_LEN,mt_data);
++	/*********************************
++	for(i = 0;i<MT_1_2_DATA_LEN;i++){
++		printk("mt_data[%d] = 0x%x\n",i,mt_data[i]);
+ 	}
++	/***********************************/
++	if(ret<0)
++		return ret;
++	
++	key_count = mt_data[MT_FINGERS_NUM_POS]>MT_FINGER_MAX ? MT_FINGER_MAX : mt_data[MT_FINGERS_NUM_POS];
++
++	ret_len =  mt_data[MT_1_2_DATA_LEN - 2]; 
++		if(key_count >0){
++			key_data = kcalloc(key_count,sizeof(struct ads_touch_key_data),GFP_KERNEL);
++			if (!key_data)
++				return -ENOMEM;
++	
++			key_data[0].pos_x = mt_data[4]*0xFF + mt_data[5];
++			key_data[0].pos_y = mt_data[6]*0xFF + mt_data[7];
++			key_data[0].status = mt_data[3];
++	
++			if(key_count > 1){
++			key_data[1].pos_x = mt_data[13]*0xFF + mt_data[14];
++			key_data[1].pos_y = mt_data[15]*0xFF + mt_data[16];
++			key_data[1].status = mt_data[12];
++
++			}
++
++	/*report touches fellows*/
++			for(i=0;i < key_count;i++)
++            {
++				if(key_data[i].status &MT_STATE_DETECT_BIT)
++                {
++					if((prev_key_status[i] != 1) && (key_data[i].status & MT_STATE_PRESS_BIT))
++                    {						
++								input_mt_slot(data->in_dev, i);
++								input_mt_report_slot_state(data->in_dev, 0, 1);
++								
++								input_report_key(data->in_dev, BTN_TOUCH, 1);
++								input_report_abs(data->in_dev, ABS_MT_POSITION_X,key_data[i].pos_x);
++								input_report_abs(data->in_dev, ABS_MT_POSITION_Y,key_data[i].pos_y);
++								
++		
++	
++                                prev_key_status[i] = 1;
++                                touch_sync=1;
++					}
++
++                    if(key_data[i].status & MT_STATE_MOVE_BIT)
++                    {						
++								input_mt_slot(data->in_dev, i);
++								input_mt_report_slot_state(data->in_dev, 0, 1);
++								
++								input_report_abs(data->in_dev, ABS_MT_POSITION_X,key_data[i].pos_x);
++								input_report_abs(data->in_dev, ABS_MT_POSITION_Y,key_data[i].pos_y);
++								
++		
++	
++                                touch_sync=1;
++					}
++
++
++                    if(key_data[i].status & MT_STATE_RELEASE_BIT)
++                    {
++                        if(prev_key_status[i] == 1)
++                        {
++                        	input_mt_slot(data->in_dev, i);
++                        	input_mt_report_slot_state(data->in_dev, 0, 0);
++                        	input_report_key(data->in_dev, BTN_TOUCH, 0);				
++                        	prev_key_status[i] = 0;
++                            touch_sync=1;
++                        }
++
++                        if(key_count == 1)
++                        {
++                            for(j=0;j<10;j++)
++                            {
++                            	input_mt_slot(data->in_dev, j);
++                            	input_mt_report_slot_state(data->in_dev, 0, 0);
++                            	input_report_key(data->in_dev, BTN_TOUCH, 0);				
++                            	prev_key_status[j] = 0;
++                                touch_sync=1;
++                            }
++                        }
++					}
++
++				}
++			}
++
++            if(touch_sync==1)
++            {
++                input_sync(data->in_dev);
++                touch_sync=0;
++            }
++			kfree(key_data);
++		}
++}
+ 
+-	retval = i2c_smbus_write_byte_data(i2c, BU21013_DONE_REG,
+-							BU21013_DONE);
+-	if (retval < 0) {
+-		dev_err(&i2c->dev, "BU21013_REG_DONE reg write failed\n");
+-		return retval;
++/*
++add multitouch report 
++*/
++static int ads_do_multitouch_screen_report(struct bu21013_ts_data *data)
++{
++	u8 rcv_data[50];
++	u8 ret;
++	ret = ads_touch_data_get(data->client, MT_1_2_REG,MT_1_2_DATA_LEN,rcv_data);
++	if(ret<0)
++		return ret;
++		
++	int key_count = rcv_data[MT_FINGERS_NUM_POS]>5? 5: rcv_data[MT_FINGERS_NUM_POS] ;
++	int key_data_raw[45];
++	memcpy(key_data_raw,rcv_data+2,18);
++
++     if(key_count>2)
++	 {	
++	 	ads_touch_data_get(data->client,MT_OTHER_TOUCHES_REG,(key_count-2)*9+3,rcv_data);
++		memcpy(key_data_raw,rcv_data+1,(key_count-2)*9);
++	 }
++	 return ads_touch_key_input_report(data,key_count,(u8*)key_data_raw); 
++}
++
++/*
++
++*/
++
++static int ads_do_touch_key_report(struct bu21013_ts_data *data)
++{
++    u8 touch_key_data[TOUCH_KEY_DATA_LEN];
++	u8 ret;
++	u8 key_id;
++	memset(touch_key_data,0,TOUCH_KEY_DATA_LEN);
++	ret = ads_touch_data_get(data->client, TOUCH_KEY_REG,TOUCH_KEY_DATA_LEN,touch_key_data);
++	if(ret<0){
++		return ret;
+ 	}
+ 
++	if(touch_key_data[TOUCH_KEY_STATUS_OFFSET] & MT_STATE_DETECT_BIT)
++    {
++       
++		if(touch_key_data[TOUCH_KEY_ID_OFFSET] == TOUCH_KEY_ID_VOL_UP){
++			key_id = KEY_VOLUMEUP;
++		}
++		else if (touch_key_data[TOUCH_KEY_ID_OFFSET] == TOUCH_KEY_ID_VOL_DN){
++			key_id = KEY_VOLUMEDOWN;
++		}
++		else if (touch_key_data[TOUCH_KEY_ID_OFFSET] == TOUCH_KEY_ID_MUTE){
++			key_id = KEY_MUTE;
++		}
++		else
++			return 0;
++	
++		input_report_key(data->in_dev, key_id, touch_key_data[TOUCH_KEY_STATUS_OFFSET]&MT_STATE_PRESS_BIT ? 1:0);
++	    input_sync(data->in_dev);
++	}	
++	return 0;
++}
++
++
++static int ads_ts_screen_status_query(struct bu21013_ts_data *data)
++{
++	u8 cbuf[6]={0,0,0,0,0,0x82};
++	return i2c_smbus_write_i2c_block_data(data->client, 0x81,6, cbuf);
++}
++
++
++
++/**
++ * bu21013_do_touch_report(): Get the touch co-ordinates
++ * @data: bu21013_ts_data structure pointer
++ *
++ * Get the touch co-ordinates from touch sensor registers and writes
++ * into device structure and returns integer.
++ */
++static int bu21013_do_touch_report(struct bu21013_ts_data *data)
++{
++
++	ads_data_read_handle(data);
++
++	return 0;
++}
++
++
++
++/**
++ * bu21013_gpio_irq() - gpio thread function for touch interrupt
++ * @irq: irq value
++ * @device_data: void pointer
++ *
++ * This gpio thread function for touch interrupt
++ * and returns irqreturn_t.
++ */
++static irqreturn_t bu21013_gpio_irq(int irq, void *device_data)
++{
++	struct bu21013_ts_data *data = device_data;
++	int err;
++	//printk("#######SVW####SVW########SVW###########SVW#####SVW#######");
++	/**********************************************************/
++	//printk("==============================\n");
++	//err = test_notifier_call_chain(1, NULL);
++	//printk("==============================\n");
++	//if(err)
++	//	printk("notifier_call_chain error\n");
++	/**********************************************************/
++
++	//bu21013_do_touch_report(data);
++	//ads_do_touch_screen_report(data);
++	ads_do_multitouch_screen_report(data);
++	clear_INTB();
++	
++	return IRQ_HANDLED;
++}
++
++/**
++ * bu21013_init_chip() - power on sequence for the bu21013 controller
++ * @data: device structure pointer
++ *
++ * This function is used to power on
++ * the bu21013 controller and returns integer.
++ */
++static int bu21013_init_chip(struct bu21013_ts_data *data)
++{
++	int retval;
++	struct i2c_client *i2c = data->client;
++	u8 val[4]={0x01,0,0,0};
++
++
++    printk(KERN_ERR "%s %s %d \n",__FILE__,__FUNCTION__,__LINE__);
++
+ 	return 0;
+ }
+ 
+@@ -424,6 +1415,29 @@ static void bu21013_free_irq(struct bu21013_ts_data *bu21013_data)
+ 	wake_up(&bu21013_data->wait);
+ 	free_irq(bu21013_data->irq, bu21013_data);
+ }
++/**
++ * bu21013_cs_disable() - deconfigures the touch panel controller
++ * @bu21013_data: device structure pointer
++ *
++ * This function is used to deconfigure the chip selection
++ * for touch panel controller.
++ */
++static void bu21013_cs_enable(struct bu21013_ts_data *bu21013_data)
++{
++	#if 0
++	int error;
++	
++	error = gpio_direction_output(bu21013_data->chip->cs_pin, 1);
++	if (error < 0)
++		dev_warn(&bu21013_data->client->dev,
++			 "%s: gpio direction failed, error: %d\n",
++			 __func__, error);
++	else
++		gpio_set_value(bu21013_data->chip->cs_pin, 1);
++
++	//gpio_free(bu21013_data->chip->cs_pin);
++	#endif
++}
+ 
+ /**
+  * bu21013_cs_disable() - deconfigures the touch panel controller
+@@ -434,6 +1448,7 @@ static void bu21013_free_irq(struct bu21013_ts_data *bu21013_data)
+  */
+ static void bu21013_cs_disable(struct bu21013_ts_data *bu21013_data)
+ {
++	#if 0
+ 	int error;
+ 
+ 	error = gpio_direction_output(bu21013_data->chip->cs_pin, 0);
+@@ -444,7 +1459,8 @@ static void bu21013_cs_disable(struct bu21013_ts_data *bu21013_data)
+ 	else
+ 		gpio_set_value(bu21013_data->chip->cs_pin, 0);
+ 
+-	gpio_free(bu21013_data->chip->cs_pin);
++	//gpio_free(bu21013_data->chip->cs_pin);
++	#endif
+ }
+ 
+ #ifdef CONFIG_OF
+@@ -487,6 +1503,85 @@ bu21013_parse_dt(struct device *dev)
+ }
+ #endif
+ 
++
++
++static void ads_work(struct work_struct *work)
++{
++	
++	/*zsx add it to detect the connect status of ADS screen*/
++	struct bu21013_ts_data *data = container_of(to_delayed_work(work), struct bu21013_ts_data, work);
++	//printk("ads_Work##########SVW TEST##################\n");
++#if 0
++
++  	printk(KERN_ERR "%s %s %d \n",__FILE__,__FUNCTION__,__LINE__);
++
++    int ret= ads_cmd_MMI_startup_done(data);
++    if(ret<0)
++    {
++		/*disconnected*/
++		ads_infos.ads_connect_status = false;
++		//ads_ts_screen_status_reset();
++	}
++	else
++	{
++		if(!ads_infos.ads_connect_status)
++		{
++			/*connected event detected,reset the level of key light */
++			u8 buf_temp[3];
++			if(ads_infos.cmd_key_light_mode<2)			
++			{	
++				buf_temp[0]=ads_infos.cmd_key_light_mode;
++				buf_temp[1]=0;
++				buf_temp[2]=LIGHT_MODE_REG +buf_temp[0]+1;
++				mutex_lock(&data->debug_msg_lock);
++				i2c_smbus_write_i2c_block_data(data->client,LIGHT_MODE_REG,3,buf_temp);
++				msleep(20);
++				mutex_unlock(&data->debug_msg_lock);
++			}
++			if(ads_infos.cmd_vol_light_mode <9)
++			{
++				buf_temp[0]=ads_infos.cmd_vol_light_mode;
++				buf_temp[1]=0;
++				buf_temp[2]=VOL_LIGHT_REG + buf_temp[0]+1;
++				mutex_lock(&data->debug_msg_lock);
++				i2c_smbus_write_i2c_block_data(data->client,VOL_LIGHT_REG,3,buf_temp);
++				msleep(20);
++				mutex_unlock(&data->debug_msg_lock);
++			}
++			if(ads_infos.cmd_backlight_level < 11)
++			{
++				buf_temp[0]=ads_infos.cmd_backlight_level;
++				buf_temp[1]=0;
++				buf_temp[2]=BACK_LIGHT_REG +buf_temp[0]+1;
++				mutex_lock(&data->debug_msg_lock);
++				i2c_smbus_write_i2c_block_data(data->client,BACK_LIGHT_REG,3,buf_temp);
++				mutex_unlock(&data->debug_msg_lock);
++			}
++		
++		}
++		ads_infos.ads_connect_status = true;
++
++		/*query to update the status*/
++		ret =ads_ts_screen_status_query(data);
++		////printk(KERN_EMERG "ads_ts_screen_status_query:%d \n",ret);
++
++		
++	}
++	#endif
++	schedule_delayed_work(&data->work,
++			msecs_to_jiffies(1000));
++	
++}
++
++
++
++
++
++
++
++
++
++
+ /**
+  * bu21013_probe() - initializes the i2c-client touchscreen driver
+  * @client: i2c client structure pointer
+@@ -504,6 +1599,10 @@ static int bu21013_probe(struct i2c_client *client,
+ 	struct input_dev *in_dev;
+ 	int error;
+ 
++    printk(KERN_ERR "%s %s %d \n",__FILE__,__FUNCTION__,__LINE__);
++
++
++
+ 	if (!i2c_check_functionality(client->adapter,
+ 					I2C_FUNC_SMBUS_BYTE_DATA)) {
+ 		dev_err(&client->dev, "i2c smbus byte data not supported\n");
+@@ -516,6 +1615,9 @@ static int bu21013_probe(struct i2c_client *client,
+ 			return PTR_ERR(pdata);
+ 	}
+ 
++    printk(KERN_ERR "TRK:[%s][%d] touch_pin[%d]\n",__FUNCTION__,__LINE__,pdata->touch_pin);
++
++
+ 	if (!gpio_is_valid(pdata->touch_pin)) {
+ 		dev_err(&client->dev, "invalid touch_pin supplied\n");
+ 		return -EINVAL;
+@@ -529,27 +1631,37 @@ static int bu21013_probe(struct i2c_client *client,
+ 		goto err_free_mem;
+ 	}
+ 
++
++	INIT_DELAYED_WORK(&bu21013_data->work, ads_work);
++
++   	mutex_init(&bu21013_data->debug_msg_lock);
++
+ 	bu21013_data->in_dev = in_dev;
+ 	bu21013_data->chip = pdata;
+ 	bu21013_data->client = client;
+ 	bu21013_data->irq = gpio_to_irq(pdata->touch_pin);
+-
++#if 0
+ 	bu21013_data->regulator = regulator_get(&client->dev, "avdd");
+ 	if (IS_ERR(bu21013_data->regulator)) {
+-		dev_err(&client->dev, "regulator_get failed\n");
++		//dev_err(&client->dev, "regulator_get failed\n");
+ 		error = PTR_ERR(bu21013_data->regulator);
+ 		goto err_free_mem;
+ 	}
+ 
+ 	error = regulator_enable(bu21013_data->regulator);
+ 	if (error < 0) {
+-		dev_err(&client->dev, "regulator enable failed\n");
++		//dev_err(&client->dev, "regulator enable failed\n");
+ 		goto err_put_regulator;
+ 	}
+-
++#endif
+ 	bu21013_data->touch_stopped = false;
++	bu21013_data->touch_inited = false;
++
+ 	init_waitqueue_head(&bu21013_data->wait);
+ 
++
++    printk(KERN_ERR "TRK:[%s][%d] cs_pin[%d]\n",__FUNCTION__,__LINE__,pdata->cs_pin);
++
+ 	/* configure the gpio pins */
+ 	error = gpio_request_one(pdata->cs_pin, GPIOF_OUT_INIT_HIGH,
+ 				 "touchp_reset");
+@@ -565,19 +1677,44 @@ static int bu21013_probe(struct i2c_client *client,
+ 		goto err_cs_disable;
+ 	}
+ 
++    printk(KERN_ERR "%s %s %d \n",__FILE__,__FUNCTION__,__LINE__);
++    printk(KERN_ERR "TRK:x+y[%d][%d] \n",pdata->touch_x_max,pdata->touch_y_max);
++
+ 	/* register the device to input subsystem */
+ 	in_dev->name = DRIVER_TP;
+ 	in_dev->id.bustype = BUS_I2C;
+-	in_dev->dev.parent = &client->dev;
++	in_dev->dev.parent = &client->dev;   
++
+ 
++//  1 config 
+ 	__set_bit(EV_SYN, in_dev->evbit);
+-	__set_bit(EV_KEY, in_dev->evbit);
+ 	__set_bit(EV_ABS, in_dev->evbit);
+-
+-	input_set_abs_params(in_dev, ABS_MT_POSITION_X, 0,
+-						pdata->touch_x_max, 0, 0);
+-	input_set_abs_params(in_dev, ABS_MT_POSITION_Y, 0,
+-						pdata->touch_y_max, 0, 0);
++	__set_bit(EV_KEY, in_dev->evbit);
++	__set_bit(BTN_TOUCH, in_dev->keybit);
++
++	
++	input_set_capability(in_dev, EV_KEY, KEY_VOLUMEUP);
++	input_set_capability(in_dev, EV_KEY, KEY_VOLUMEDOWN);	
++	input_set_capability(in_dev, EV_KEY, KEY_MUTE);
++
++	// For single touch 
++	input_set_abs_params(in_dev, ABS_X,0, pdata->touch_x_max, 0, 0);
++	input_set_abs_params(in_dev, ABS_Y,0, pdata->touch_y_max, 0, 0);
++	input_set_abs_params(in_dev, ABS_PRESSURE,0, 255, 0, 0);
++
++
++	// for mutli touch 
++	input_mt_init_slots(in_dev, 5, INPUT_MT_DIRECT);
++	input_set_abs_params(in_dev, ABS_MT_POSITION_X, 0, pdata->touch_x_max, 0, 0);
++	input_set_abs_params(in_dev, ABS_MT_POSITION_Y, 0, pdata->touch_y_max, 0, 0);
++	//printk("#########################SVW PROBE#########################");
++	
++#ifdef FUNC_PRESSURE_MAJOR_VETOR		
++	input_set_abs_params(in_dev, ABS_MT_TOUCH_MAJOR, 0, pdata->touch_x_max, 0, 0);
++	input_set_abs_params(in_dev, ABS_MT_TOUCH_MINOR, 0, pdata->touch_y_max, 0, 0);
++	input_set_abs_params(in_dev, ABS_MT_PRESSURE, 0, 255, 0, 0);
++	input_set_abs_params(in_dev, ABS_MT_ORIENTATION, 0, 1, 0, 0);
++#endif
+ 	input_set_drvdata(in_dev, bu21013_data);
+ 
+ 	error = request_threaded_irq(bu21013_data->irq, NULL, bu21013_gpio_irq,
+@@ -596,9 +1733,24 @@ static int bu21013_probe(struct i2c_client *client,
+ 		goto err_free_irq;
+ 	}
+ 
++	
++    printk(KERN_ERR "%s %s %d wakeup[%d] addr[0x02x] \n",__FILE__,__FUNCTION__,__LINE__, pdata->wakeup,client->addr);
++	
++	
+ 	device_init_wakeup(&client->dev, pdata->wakeup);
++
+ 	i2c_set_clientdata(client, bu21013_data);
+ 
++	ads_info_init();
++
++	schedule_delayed_work(&bu21013_data->work, msecs_to_jiffies(1000));
++
++	error = ads_ts_sysfs_init(bu21013_data);
++	if (error) {
++		dev_err(&client->dev, "failed to register sys attr\n");
++		goto err_free_irq;
++	}
++	printk("#########################SVW PROBE#########################\n");
+ 	return 0;
+ 
+ err_free_irq:
+@@ -637,6 +1789,8 @@ static int bu21013_remove(struct i2c_client *client)
+ 
+ 	kfree(bu21013_data);
+ 
++	device_init_wakeup(&client->dev, false);
++
+ 	return 0;
+ }
+ 
+@@ -714,6 +1868,7 @@ MODULE_DEVICE_TABLE(i2c, bu21013_id);
+ static struct i2c_driver bu21013_driver = {
+ 	.driver	= {
+ 		.name	=	DRIVER_TP,
++		.owner	=	THIS_MODULE,
+ #ifdef CONFIG_PM
+ 		.pm	=	&bu21013_dev_pm_ops,
+ #endif
+@@ -723,7 +1878,27 @@ static struct i2c_driver bu21013_driver = {
+ 	.id_table	=	bu21013_id,
+ };
+ 
+-module_i2c_driver(bu21013_driver);
++
++
++static int __init bu21013_driver_init(void)
++{
++    return i2c_register_driver(THIS_MODULE,&bu21013_driver);
++}
++
++
++static void __exit bu21013_driver_exit(void)
++{
++    return i2c_del_driver(&bu21013_driver);
++}
++
++
++late_initcall(bu21013_driver_init);
++module_exit(bu21013_driver_exit);
++
++
++
++
++//module_i2c_driver(bu21013_driver);
+ 
+ MODULE_LICENSE("GPL v2");
+ MODULE_AUTHOR("Naveen Kumar G <naveen.gaddipati@stericsson.com>");
+diff --git a/drivers/input/touchscreen/bu21013_ts_old.c b/drivers/input/touchscreen/bu21013_ts_old.c
+new file mode 100644
+index 0000000..4fa5da8
+--- /dev/null
++++ b/drivers/input/touchscreen/bu21013_ts_old.c
+@@ -0,0 +1,730 @@
++/*
++ * Copyright (C) ST-Ericsson SA 2010
++ * Author: Naveen Kumar G <naveen.gaddipati@stericsson.com> for ST-Ericsson
++ * License terms:GNU General Public License (GPL) version 2
++ */
++
++#include <linux/kernel.h>
++#include <linux/delay.h>
++#include <linux/interrupt.h>
++#include <linux/i2c.h>
++#include <linux/workqueue.h>
++#include <linux/input.h>
++#include <linux/input/bu21013.h>
++#include <linux/slab.h>
++#include <linux/regulator/consumer.h>
++#include <linux/module.h>
++#include <linux/gpio.h>
++#include <linux/of.h>
++#include <linux/of_gpio.h>
++
++#define PEN_DOWN_INTR	0
++#define MAX_FINGERS	2
++#define RESET_DELAY	30
++#define PENUP_TIMEOUT	(10)
++#define DELTA_MIN	16
++#define MASK_BITS	0x03
++#define SHIFT_8		8
++#define SHIFT_2		2
++#define LENGTH_OF_BUFFER	11
++#define I2C_RETRY_COUNT	5
++
++#define BU21013_SENSORS_BTN_0_7_REG	0x70
++#define BU21013_SENSORS_BTN_8_15_REG	0x71
++#define BU21013_SENSORS_BTN_16_23_REG	0x72
++#define BU21013_X1_POS_MSB_REG		0x73
++#define BU21013_X1_POS_LSB_REG		0x74
++#define BU21013_Y1_POS_MSB_REG		0x75
++#define BU21013_Y1_POS_LSB_REG		0x76
++#define BU21013_X2_POS_MSB_REG		0x77
++#define BU21013_X2_POS_LSB_REG		0x78
++#define BU21013_Y2_POS_MSB_REG		0x79
++#define BU21013_Y2_POS_LSB_REG		0x7A
++#define BU21013_INT_CLR_REG		0xE8
++#define BU21013_INT_MODE_REG		0xE9
++#define BU21013_GAIN_REG		0xEA
++#define BU21013_OFFSET_MODE_REG		0xEB
++#define BU21013_XY_EDGE_REG		0xEC
++#define BU21013_RESET_REG		0xED
++#define BU21013_CALIB_REG		0xEE
++#define BU21013_DONE_REG		0xEF
++#define BU21013_SENSOR_0_7_REG		0xF0
++#define BU21013_SENSOR_8_15_REG		0xF1
++#define BU21013_SENSOR_16_23_REG	0xF2
++#define BU21013_POS_MODE1_REG		0xF3
++#define BU21013_POS_MODE2_REG		0xF4
++#define BU21013_CLK_MODE_REG		0xF5
++#define BU21013_IDLE_REG		0xFA
++#define BU21013_FILTER_REG		0xFB
++#define BU21013_TH_ON_REG		0xFC
++#define BU21013_TH_OFF_REG		0xFD
++
++
++#define BU21013_RESET_ENABLE		0x01
++
++#define BU21013_SENSORS_EN_0_7		0x3F
++#define BU21013_SENSORS_EN_8_15		0xFC
++#define BU21013_SENSORS_EN_16_23	0x1F
++
++#define BU21013_POS_MODE1_0		0x02
++#define BU21013_POS_MODE1_1		0x04
++#define BU21013_POS_MODE1_2		0x08
++
++#define BU21013_POS_MODE2_ZERO		0x01
++#define BU21013_POS_MODE2_AVG1		0x02
++#define BU21013_POS_MODE2_AVG2		0x04
++#define BU21013_POS_MODE2_EN_XY		0x08
++#define BU21013_POS_MODE2_EN_RAW	0x10
++#define BU21013_POS_MODE2_MULTI		0x80
++
++#define BU21013_CLK_MODE_DIV		0x01
++#define BU21013_CLK_MODE_EXT		0x02
++#define BU21013_CLK_MODE_CALIB		0x80
++
++#define BU21013_IDLET_0			0x01
++#define BU21013_IDLET_1			0x02
++#define BU21013_IDLET_2			0x04
++#define BU21013_IDLET_3			0x08
++#define BU21013_IDLE_INTERMIT_EN	0x10
++
++#define BU21013_DELTA_0_6	0x7F
++#define BU21013_FILTER_EN	0x80
++
++#define BU21013_INT_MODE_LEVEL	0x00
++#define BU21013_INT_MODE_EDGE	0x01
++
++#define BU21013_GAIN_0		0x01
++#define BU21013_GAIN_1		0x02
++#define BU21013_GAIN_2		0x04
++
++#define BU21013_OFFSET_MODE_DEFAULT	0x00
++#define BU21013_OFFSET_MODE_MOVE	0x01
++#define BU21013_OFFSET_MODE_DISABLE	0x02
++
++#define BU21013_TH_ON_0		0x01
++#define BU21013_TH_ON_1		0x02
++#define BU21013_TH_ON_2		0x04
++#define BU21013_TH_ON_3		0x08
++#define BU21013_TH_ON_4		0x10
++#define BU21013_TH_ON_5		0x20
++#define BU21013_TH_ON_6		0x40
++#define BU21013_TH_ON_7		0x80
++#define BU21013_TH_ON_MAX	0xFF
++
++#define BU21013_TH_OFF_0	0x01
++#define BU21013_TH_OFF_1	0x02
++#define BU21013_TH_OFF_2	0x04
++#define BU21013_TH_OFF_3	0x08
++#define BU21013_TH_OFF_4	0x10
++#define BU21013_TH_OFF_5	0x20
++#define BU21013_TH_OFF_6	0x40
++#define BU21013_TH_OFF_7	0x80
++#define BU21013_TH_OFF_MAX	0xFF
++
++#define BU21013_X_EDGE_0	0x01
++#define BU21013_X_EDGE_1	0x02
++#define BU21013_X_EDGE_2	0x04
++#define BU21013_X_EDGE_3	0x08
++#define BU21013_Y_EDGE_0	0x10
++#define BU21013_Y_EDGE_1	0x20
++#define BU21013_Y_EDGE_2	0x40
++#define BU21013_Y_EDGE_3	0x80
++
++#define BU21013_DONE	0x01
++#define BU21013_NUMBER_OF_X_SENSORS	(6)
++#define BU21013_NUMBER_OF_Y_SENSORS	(11)
++
++#define DRIVER_TP	"bu21013_tp"
++
++/**
++ * struct bu21013_ts_data - touch panel data structure
++ * @client: pointer to the i2c client
++ * @wait: variable to wait_queue_head_t structure
++ * @touch_stopped: touch stop flag
++ * @chip: pointer to the touch panel controller
++ * @in_dev: pointer to the input device structure
++ * @intr_pin: interrupt pin value
++ * @regulator: pointer to the Regulator used for touch screen
++ *
++ * Touch panel device data structure
++ */
++struct bu21013_ts_data {
++	struct i2c_client *client;
++	wait_queue_head_t wait;
++	const struct bu21013_platform_device *chip;
++	struct input_dev *in_dev;
++	struct regulator *regulator;
++	unsigned int irq;
++	unsigned int intr_pin;
++	bool touch_stopped;
++};
++
++/**
++ * bu21013_read_block_data(): read the touch co-ordinates
++ * @data: bu21013_ts_data structure pointer
++ * @buf: byte pointer
++ *
++ * Read the touch co-ordinates using i2c read block into buffer
++ * and returns integer.
++ */
++static int bu21013_read_block_data(struct bu21013_ts_data *data, u8 *buf)
++{
++	int ret, i;
++
++	for (i = 0; i < I2C_RETRY_COUNT; i++) {
++		ret = i2c_smbus_read_i2c_block_data
++			(data->client, BU21013_SENSORS_BTN_0_7_REG,
++				LENGTH_OF_BUFFER, buf);
++		if (ret == LENGTH_OF_BUFFER)
++			return 0;
++	}
++	return -EINVAL;
++}
++
++/**
++ * bu21013_do_touch_report(): Get the touch co-ordinates
++ * @data: bu21013_ts_data structure pointer
++ *
++ * Get the touch co-ordinates from touch sensor registers and writes
++ * into device structure and returns integer.
++ */
++static int bu21013_do_touch_report(struct bu21013_ts_data *data)
++{
++	u8	buf[LENGTH_OF_BUFFER];
++	unsigned int pos_x[2], pos_y[2];
++	bool	has_x_sensors, has_y_sensors;
++	int	finger_down_count = 0;
++	int	i;
++
++	if (data == NULL)
++		return -EINVAL;
++
++	if (bu21013_read_block_data(data, buf) < 0)
++		return -EINVAL;
++
++	has_x_sensors = hweight32(buf[0] & BU21013_SENSORS_EN_0_7);
++	has_y_sensors = hweight32(((buf[1] & BU21013_SENSORS_EN_8_15) |
++		((buf[2] & BU21013_SENSORS_EN_16_23) << SHIFT_8)) >> SHIFT_2);
++	if (!has_x_sensors || !has_y_sensors)
++		return 0;
++
++	for (i = 0; i < MAX_FINGERS; i++) {
++		const u8 *p = &buf[4 * i + 3];
++		unsigned int x = p[0] << SHIFT_2 | (p[1] & MASK_BITS);
++		unsigned int y = p[2] << SHIFT_2 | (p[3] & MASK_BITS);
++		if (x == 0 || y == 0)
++			continue;
++		pos_x[finger_down_count] = x;
++		pos_y[finger_down_count] = y;
++		finger_down_count++;
++	}
++
++	if (finger_down_count) {
++		if (finger_down_count == 2 &&
++		    (abs(pos_x[0] - pos_x[1]) < DELTA_MIN ||
++		     abs(pos_y[0] - pos_y[1]) < DELTA_MIN)) {
++			return 0;
++		}
++
++		for (i = 0; i < finger_down_count; i++) {
++			if (data->chip->x_flip)
++				pos_x[i] = data->chip->touch_x_max - pos_x[i];
++			if (data->chip->y_flip)
++				pos_y[i] = data->chip->touch_y_max - pos_y[i];
++
++			input_report_abs(data->in_dev,
++					 ABS_MT_POSITION_X, pos_x[i]);
++			input_report_abs(data->in_dev,
++					 ABS_MT_POSITION_Y, pos_y[i]);
++			input_mt_sync(data->in_dev);
++		}
++	} else
++		input_mt_sync(data->in_dev);
++
++	input_sync(data->in_dev);
++
++	return 0;
++}
++/**
++ * bu21013_gpio_irq() - gpio thread function for touch interrupt
++ * @irq: irq value
++ * @device_data: void pointer
++ *
++ * This gpio thread function for touch interrupt
++ * and returns irqreturn_t.
++ */
++static irqreturn_t bu21013_gpio_irq(int irq, void *device_data)
++{
++	struct bu21013_ts_data *data = device_data;
++	struct i2c_client *i2c = data->client;
++	int retval;
++
++	do {
++		retval = bu21013_do_touch_report(data);
++		if (retval < 0) {
++			dev_err(&i2c->dev, "bu21013_do_touch_report failed\n");
++			return IRQ_NONE;
++		}
++
++		data->intr_pin = gpio_get_value(data->chip->touch_pin);
++		if (data->intr_pin == PEN_DOWN_INTR)
++			wait_event_timeout(data->wait, data->touch_stopped,
++					   msecs_to_jiffies(2));
++	} while (!data->intr_pin && !data->touch_stopped);
++
++	return IRQ_HANDLED;
++}
++
++/**
++ * bu21013_init_chip() - power on sequence for the bu21013 controller
++ * @data: device structure pointer
++ *
++ * This function is used to power on
++ * the bu21013 controller and returns integer.
++ */
++static int bu21013_init_chip(struct bu21013_ts_data *data)
++{
++	int retval;
++	struct i2c_client *i2c = data->client;
++
++	retval = i2c_smbus_write_byte_data(i2c, BU21013_RESET_REG,
++					BU21013_RESET_ENABLE);
++	if (retval < 0) {
++		dev_err(&i2c->dev, "BU21013_RESET reg write failed\n");
++		return retval;
++	}
++	msleep(RESET_DELAY);
++
++	retval = i2c_smbus_write_byte_data(i2c, BU21013_SENSOR_0_7_REG,
++					BU21013_SENSORS_EN_0_7);
++	if (retval < 0) {
++		dev_err(&i2c->dev, "BU21013_SENSOR_0_7 reg write failed\n");
++		return retval;
++	}
++
++	retval = i2c_smbus_write_byte_data(i2c, BU21013_SENSOR_8_15_REG,
++						BU21013_SENSORS_EN_8_15);
++	if (retval < 0) {
++		dev_err(&i2c->dev, "BU21013_SENSOR_8_15 reg write failed\n");
++		return retval;
++	}
++
++	retval = i2c_smbus_write_byte_data(i2c, BU21013_SENSOR_16_23_REG,
++						BU21013_SENSORS_EN_16_23);
++	if (retval < 0) {
++		dev_err(&i2c->dev, "BU21013_SENSOR_16_23 reg write failed\n");
++		return retval;
++	}
++
++	retval = i2c_smbus_write_byte_data(i2c, BU21013_POS_MODE1_REG,
++				(BU21013_POS_MODE1_0 | BU21013_POS_MODE1_1));
++	if (retval < 0) {
++		dev_err(&i2c->dev, "BU21013_POS_MODE1 reg write failed\n");
++		return retval;
++	}
++
++	retval = i2c_smbus_write_byte_data(i2c, BU21013_POS_MODE2_REG,
++			(BU21013_POS_MODE2_ZERO | BU21013_POS_MODE2_AVG1 |
++			BU21013_POS_MODE2_AVG2 | BU21013_POS_MODE2_EN_RAW |
++			BU21013_POS_MODE2_MULTI));
++	if (retval < 0) {
++		dev_err(&i2c->dev, "BU21013_POS_MODE2 reg write failed\n");
++		return retval;
++	}
++
++	if (data->chip->ext_clk)
++		retval = i2c_smbus_write_byte_data(i2c, BU21013_CLK_MODE_REG,
++			(BU21013_CLK_MODE_EXT | BU21013_CLK_MODE_CALIB));
++	else
++		retval = i2c_smbus_write_byte_data(i2c, BU21013_CLK_MODE_REG,
++			(BU21013_CLK_MODE_DIV | BU21013_CLK_MODE_CALIB));
++	if (retval < 0) {
++		dev_err(&i2c->dev, "BU21013_CLK_MODE reg write failed\n");
++		return retval;
++	}
++
++	retval = i2c_smbus_write_byte_data(i2c, BU21013_IDLE_REG,
++				(BU21013_IDLET_0 | BU21013_IDLE_INTERMIT_EN));
++	if (retval < 0) {
++		dev_err(&i2c->dev, "BU21013_IDLE reg write failed\n");
++		return retval;
++	}
++
++	retval = i2c_smbus_write_byte_data(i2c, BU21013_INT_MODE_REG,
++						BU21013_INT_MODE_LEVEL);
++	if (retval < 0) {
++		dev_err(&i2c->dev, "BU21013_INT_MODE reg write failed\n");
++		return retval;
++	}
++
++	retval = i2c_smbus_write_byte_data(i2c, BU21013_FILTER_REG,
++						(BU21013_DELTA_0_6 |
++							BU21013_FILTER_EN));
++	if (retval < 0) {
++		dev_err(&i2c->dev, "BU21013_FILTER reg write failed\n");
++		return retval;
++	}
++
++	retval = i2c_smbus_write_byte_data(i2c, BU21013_TH_ON_REG,
++					BU21013_TH_ON_5);
++	if (retval < 0) {
++		dev_err(&i2c->dev, "BU21013_TH_ON reg write failed\n");
++		return retval;
++	}
++
++	retval = i2c_smbus_write_byte_data(i2c, BU21013_TH_OFF_REG,
++				BU21013_TH_OFF_4 | BU21013_TH_OFF_3);
++	if (retval < 0) {
++		dev_err(&i2c->dev, "BU21013_TH_OFF reg write failed\n");
++		return retval;
++	}
++
++	retval = i2c_smbus_write_byte_data(i2c, BU21013_GAIN_REG,
++					(BU21013_GAIN_0 | BU21013_GAIN_1));
++	if (retval < 0) {
++		dev_err(&i2c->dev, "BU21013_GAIN reg write failed\n");
++		return retval;
++	}
++
++	retval = i2c_smbus_write_byte_data(i2c, BU21013_OFFSET_MODE_REG,
++					BU21013_OFFSET_MODE_DEFAULT);
++	if (retval < 0) {
++		dev_err(&i2c->dev, "BU21013_OFFSET_MODE reg write failed\n");
++		return retval;
++	}
++
++	retval = i2c_smbus_write_byte_data(i2c, BU21013_XY_EDGE_REG,
++				(BU21013_X_EDGE_0 | BU21013_X_EDGE_2 |
++				BU21013_Y_EDGE_1 | BU21013_Y_EDGE_3));
++	if (retval < 0) {
++		dev_err(&i2c->dev, "BU21013_XY_EDGE reg write failed\n");
++		return retval;
++	}
++
++	retval = i2c_smbus_write_byte_data(i2c, BU21013_DONE_REG,
++							BU21013_DONE);
++	if (retval < 0) {
++		dev_err(&i2c->dev, "BU21013_REG_DONE reg write failed\n");
++		return retval;
++	}
++
++	return 0;
++}
++
++/**
++ * bu21013_free_irq() - frees IRQ registered for touchscreen
++ * @bu21013_data: device structure pointer
++ *
++ * This function signals interrupt thread to stop processing and
++ * frees interrupt.
++ */
++static void bu21013_free_irq(struct bu21013_ts_data *bu21013_data)
++{
++	bu21013_data->touch_stopped = true;
++	wake_up(&bu21013_data->wait);
++	free_irq(bu21013_data->irq, bu21013_data);
++}
++
++/**
++ * bu21013_cs_disable() - deconfigures the touch panel controller
++ * @bu21013_data: device structure pointer
++ *
++ * This function is used to deconfigure the chip selection
++ * for touch panel controller.
++ */
++static void bu21013_cs_disable(struct bu21013_ts_data *bu21013_data)
++{
++	int error;
++
++	error = gpio_direction_output(bu21013_data->chip->cs_pin, 0);
++	if (error < 0)
++		dev_warn(&bu21013_data->client->dev,
++			 "%s: gpio direction failed, error: %d\n",
++			 __func__, error);
++	else
++		gpio_set_value(bu21013_data->chip->cs_pin, 0);
++
++	gpio_free(bu21013_data->chip->cs_pin);
++}
++
++#ifdef CONFIG_OF
++static const struct bu21013_platform_device *
++bu21013_parse_dt(struct device *dev)
++{
++	struct device_node *np = dev->of_node;
++	struct bu21013_platform_device *pdata;
++
++	if (!np) {
++		dev_err(dev, "no device tree or platform data\n");
++		return ERR_PTR(-EINVAL);
++	}
++
++	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
++	if (!pdata)
++		return ERR_PTR(-ENOMEM);
++
++	pdata->y_flip = pdata->x_flip = false;
++
++	pdata->x_flip = of_property_read_bool(np, "rohm,flip-x");
++	pdata->y_flip = of_property_read_bool(np, "rohm,flip-y");
++
++	of_property_read_u32(np, "rohm,touch-max-x", &pdata->touch_x_max);
++	of_property_read_u32(np, "rohm,touch-max-y", &pdata->touch_y_max);
++
++	pdata->touch_pin = of_get_named_gpio(np, "touch-gpio", 0);
++	pdata->cs_pin = of_get_named_gpio(np, "reset-gpio", 0);
++
++	pdata->ext_clk = false;
++
++	return pdata;
++}
++#else
++static inline const struct bu21013_platform_device *
++bu21013_parse_dt(struct device *dev)
++{
++	dev_err(dev, "no platform data available\n");
++	return ERR_PTR(-EINVAL);
++}
++#endif
++
++/**
++ * bu21013_probe() - initializes the i2c-client touchscreen driver
++ * @client: i2c client structure pointer
++ * @id: i2c device id pointer
++ *
++ * This function used to initializes the i2c-client touchscreen
++ * driver and returns integer.
++ */
++static int bu21013_probe(struct i2c_client *client,
++			 const struct i2c_device_id *id)
++{
++	const struct bu21013_platform_device *pdata =
++					dev_get_platdata(&client->dev);
++	struct bu21013_ts_data *bu21013_data;
++	struct input_dev *in_dev;
++	int error;
++
++	if (!i2c_check_functionality(client->adapter,
++					I2C_FUNC_SMBUS_BYTE_DATA)) {
++		dev_err(&client->dev, "i2c smbus byte data not supported\n");
++		return -EIO;
++	}
++
++	if (!pdata) {
++		pdata = bu21013_parse_dt(&client->dev);
++		if (IS_ERR(pdata))
++			return PTR_ERR(pdata);
++	}
++
++	if (!gpio_is_valid(pdata->touch_pin)) {
++		dev_err(&client->dev, "invalid touch_pin supplied\n");
++		return -EINVAL;
++	}
++
++	bu21013_data = kzalloc(sizeof(struct bu21013_ts_data), GFP_KERNEL);
++	in_dev = input_allocate_device();
++	if (!bu21013_data || !in_dev) {
++		dev_err(&client->dev, "device memory alloc failed\n");
++		error = -ENOMEM;
++		goto err_free_mem;
++	}
++
++	bu21013_data->in_dev = in_dev;
++	bu21013_data->chip = pdata;
++	bu21013_data->client = client;
++	bu21013_data->irq = gpio_to_irq(pdata->touch_pin);
++
++	bu21013_data->regulator = regulator_get(&client->dev, "avdd");
++	if (IS_ERR(bu21013_data->regulator)) {
++		dev_err(&client->dev, "regulator_get failed\n");
++		error = PTR_ERR(bu21013_data->regulator);
++		goto err_free_mem;
++	}
++
++	error = regulator_enable(bu21013_data->regulator);
++	if (error < 0) {
++		dev_err(&client->dev, "regulator enable failed\n");
++		goto err_put_regulator;
++	}
++
++	bu21013_data->touch_stopped = false;
++	init_waitqueue_head(&bu21013_data->wait);
++
++	/* configure the gpio pins */
++	error = gpio_request_one(pdata->cs_pin, GPIOF_OUT_INIT_HIGH,
++				 "touchp_reset");
++	if (error < 0) {
++		dev_err(&client->dev, "Unable to request gpio reset_pin\n");
++		goto err_disable_regulator;
++	}
++
++	/* configure the touch panel controller */
++	error = bu21013_init_chip(bu21013_data);
++	if (error) {
++		dev_err(&client->dev, "error in bu21013 config\n");
++		goto err_cs_disable;
++	}
++
++	/* register the device to input subsystem */
++	in_dev->name = DRIVER_TP;
++	in_dev->id.bustype = BUS_I2C;
++	in_dev->dev.parent = &client->dev;
++
++	__set_bit(EV_SYN, in_dev->evbit);
++	__set_bit(EV_KEY, in_dev->evbit);
++	__set_bit(EV_ABS, in_dev->evbit);
++
++	input_set_abs_params(in_dev, ABS_MT_POSITION_X, 0,
++						pdata->touch_x_max, 0, 0);
++	input_set_abs_params(in_dev, ABS_MT_POSITION_Y, 0,
++						pdata->touch_y_max, 0, 0);
++	input_set_drvdata(in_dev, bu21013_data);
++
++	error = request_threaded_irq(bu21013_data->irq, NULL, bu21013_gpio_irq,
++				     IRQF_TRIGGER_FALLING | IRQF_SHARED |
++					IRQF_ONESHOT,
++				     DRIVER_TP, bu21013_data);
++	if (error) {
++		dev_err(&client->dev, "request irq %d failed\n",
++			bu21013_data->irq);
++		goto err_cs_disable;
++	}
++
++	error = input_register_device(in_dev);
++	if (error) {
++		dev_err(&client->dev, "failed to register input device\n");
++		goto err_free_irq;
++	}
++
++	device_init_wakeup(&client->dev, pdata->wakeup);
++	i2c_set_clientdata(client, bu21013_data);
++
++	return 0;
++
++err_free_irq:
++	bu21013_free_irq(bu21013_data);
++err_cs_disable:
++	bu21013_cs_disable(bu21013_data);
++err_disable_regulator:
++	regulator_disable(bu21013_data->regulator);
++err_put_regulator:
++	regulator_put(bu21013_data->regulator);
++err_free_mem:
++	input_free_device(in_dev);
++	kfree(bu21013_data);
++
++	return error;
++}
++/**
++ * bu21013_remove() - removes the i2c-client touchscreen driver
++ * @client: i2c client structure pointer
++ *
++ * This function uses to remove the i2c-client
++ * touchscreen driver and returns integer.
++ */
++static int bu21013_remove(struct i2c_client *client)
++{
++	struct bu21013_ts_data *bu21013_data = i2c_get_clientdata(client);
++
++	bu21013_free_irq(bu21013_data);
++
++	bu21013_cs_disable(bu21013_data);
++
++	input_unregister_device(bu21013_data->in_dev);
++
++	regulator_disable(bu21013_data->regulator);
++	regulator_put(bu21013_data->regulator);
++
++	kfree(bu21013_data);
++
++	return 0;
++}
++
++#ifdef CONFIG_PM
++/**
++ * bu21013_suspend() - suspend the touch screen controller
++ * @dev: pointer to device structure
++ *
++ * This function is used to suspend the
++ * touch panel controller and returns integer
++ */
++static int bu21013_suspend(struct device *dev)
++{
++	struct bu21013_ts_data *bu21013_data = dev_get_drvdata(dev);
++	struct i2c_client *client = bu21013_data->client;
++
++	bu21013_data->touch_stopped = true;
++	if (device_may_wakeup(&client->dev))
++		enable_irq_wake(bu21013_data->irq);
++	else
++		disable_irq(bu21013_data->irq);
++
++	regulator_disable(bu21013_data->regulator);
++
++	return 0;
++}
++
++/**
++ * bu21013_resume() - resume the touch screen controller
++ * @dev: pointer to device structure
++ *
++ * This function is used to resume the touch panel
++ * controller and returns integer.
++ */
++static int bu21013_resume(struct device *dev)
++{
++	struct bu21013_ts_data *bu21013_data = dev_get_drvdata(dev);
++	struct i2c_client *client = bu21013_data->client;
++	int retval;
++
++	retval = regulator_enable(bu21013_data->regulator);
++	if (retval < 0) {
++		dev_err(&client->dev, "bu21013 regulator enable failed\n");
++		return retval;
++	}
++
++	retval = bu21013_init_chip(bu21013_data);
++	if (retval < 0) {
++		dev_err(&client->dev, "bu21013 controller config failed\n");
++		return retval;
++	}
++
++	bu21013_data->touch_stopped = false;
++
++	if (device_may_wakeup(&client->dev))
++		disable_irq_wake(bu21013_data->irq);
++	else
++		enable_irq(bu21013_data->irq);
++
++	return 0;
++}
++
++static const struct dev_pm_ops bu21013_dev_pm_ops = {
++	.suspend = bu21013_suspend,
++	.resume  = bu21013_resume,
++};
++#endif
++
++static const struct i2c_device_id bu21013_id[] = {
++	{ DRIVER_TP, 0 },
++	{ }
++};
++MODULE_DEVICE_TABLE(i2c, bu21013_id);
++
++static struct i2c_driver bu21013_driver = {
++	.driver	= {
++		.name	=	DRIVER_TP,
++#ifdef CONFIG_PM
++		.pm	=	&bu21013_dev_pm_ops,
++#endif
++	},
++	.probe		=	bu21013_probe,
++	.remove		=	bu21013_remove,
++	.id_table	=	bu21013_id,
++};
++
++module_i2c_driver(bu21013_driver);
++
++MODULE_LICENSE("GPL v2");
++MODULE_AUTHOR("Naveen Kumar G <naveen.gaddipati@stericsson.com>");
++MODULE_DESCRIPTION("bu21013 touch screen controller driver");
+-- 
+2.7.4
+
