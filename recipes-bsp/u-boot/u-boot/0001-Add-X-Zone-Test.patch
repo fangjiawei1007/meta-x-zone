@@ -1,0 +1,30 @@
+From d03e2df51e36728f2a088ef1d09aee7c5c3848da Mon Sep 17 00:00:00 2001
+From: Fang Jiawei <fangjiawei1007@gmail.com>
+Date: Thu, 19 Mar 2020 08:26:47 +0000
+Subject: [PATCH] Add X-Zone Test
+
+---
+ common/board_f.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/common/board_f.c b/common/board_f.c
+index 88d7700..1decde9 100644
+--- a/common/board_f.c
++++ b/common/board_f.c
+@@ -142,6 +142,13 @@ static int display_text_info(void)
+ 
+ static int announce_dram_init(void)
+ {
++	/***********Test for X-Zone U-Boot**************/	
++	puts("\n######## X-Zone Test by SVW ########\n");	
++	puts("\n######## X-Zone Test by SVW ########\n");	
++	puts("\n######## X-Zone Test by SVW ########\n");		
++	puts("\n######## X-Zone Test by SVW ########\n");	
++	puts("\n######## X-Zone Test by SVW ########\n");	
++	/***********************************************/
+ 	puts("DRAM:  ");
+ 	return 0;
+ }
+-- 
+2.7.4
+
