@@ -1,0 +1,47 @@
+From 6f49a1ae6676fbfb6542cff6439b135f8d0d6110 Mon Sep 17 00:00:00 2001
+From: Fang Jiawei <fangjiawei1007@gmail.com>
+Date: Wed, 25 Mar 2020 05:17:21 +0000
+Subject: [PATCH 4/4] Add CAN0 Support(not canfd)
+
+---
+ arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts b/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
+index d671d1f..0e8d8e2 100644
+--- a/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
++++ b/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
+@@ -237,6 +237,13 @@
+ 		groups = "usb2_ch3";
+ 		function = "usb2_ch3";
+ 	};
++	/*SVW Add CAN Support*/
++	can0_pins: can0_data_a{
++		groups = "can0_data_a";
++		function = "can0";
++	};
++
++
+ };
+ 
+ &usb2_phy2 {
+@@ -291,4 +298,16 @@
+ 
+ };
+ 
++&can0 {
++	pinctrl-0 = <&can0_pins>;
++	pinctrl-names = "default";
++	status = "okay";	
++};
++
++
++
++
++
++
++
+ 
+-- 
+2.7.4
+
