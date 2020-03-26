@@ -1,3 +1,4 @@
 patch 0001-Add-X-Zone-dts-origin-files.patch
 patch 0002-Add-DESAY-Display-Support.patch
 patch 0003-Add-DESAY-Touch-Screen-Support.patch
+patch 0004-Add-CAN0-Support-not-canfd.patch
