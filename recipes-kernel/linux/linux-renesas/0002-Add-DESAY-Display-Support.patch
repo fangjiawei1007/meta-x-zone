@@ -1,7 +1,7 @@
-From 7daa2fa43d0b54263256f3ee96cca87278e0a985 Mon Sep 17 00:00:00 2001
+From f2f5bb413e5958106c8aa914c5a9adaa75d814b5 Mon Sep 17 00:00:00 2001
 From: OpenEmbedded <oe.patch@oe>
 Date: Thu, 19 Mar 2020 09:09:14 +0000
-Subject: [PATCH 2/2] Add DESAY Display Support
+Subject: [PATCH 2/4] Add DESAY Display Support
 
 ---
  drivers/gpu/drm/bridge/synopsys/dw-hdmi.c | 36 ++++++++++++++++++++++++++++++-

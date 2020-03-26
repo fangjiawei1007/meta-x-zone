@@ -1,7 +1,7 @@
-From 3fe6f97479de43859135de1e9c9bcfea3de815ad Mon Sep 17 00:00:00 2001
+From 9ef03fb5505f29dc61ce4bd31a285d66d2e71537 Mon Sep 17 00:00:00 2001
 From: OpenEmbedded <oe.patch@oe>
 Date: Thu, 19 Mar 2020 08:50:57 +0000
-Subject: [PATCH 1/2] Add X-Zone dts origin files
+Subject: [PATCH 1/4] Add X-Zone dts origin files
 
 ---
  arch/arm64/boot/dts/renesas/Makefile               |   4 +-

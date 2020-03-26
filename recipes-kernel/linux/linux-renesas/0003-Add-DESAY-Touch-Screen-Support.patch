@@ -1,7 +1,7 @@
-From ac5510fb1f47e38c04992a62658a1566af1363ac Mon Sep 17 00:00:00 2001
+From 35c63d28c3f61bd80dc3137d3e9dc00c7af52515 Mon Sep 17 00:00:00 2001
 From: OpenEmbedded <oe.patch@oe>
 Date: Fri, 20 Mar 2020 01:47:21 +0000
-Subject: [PATCH 3/3] Add DESAY Touch Screen Support
+Subject: [PATCH 3/4] Add DESAY Touch Screen Support
 
 ---
  arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts |   24 +
@@ -77,7 +77,7 @@ index 850c156..464ca41 100644
 +obj-$(CONFIG_TI949_DRV)		        += TI949_drv.o
 diff --git a/drivers/input/touchscreen/TI949_drv.c b/drivers/input/touchscreen/TI949_drv.c
 new file mode 100755
-index 0000000..a3c628b
+index 0000000..5f747b4
 --- /dev/null
 +++ b/drivers/input/touchscreen/TI949_drv.c
 @@ -0,0 +1,330 @@
