@@ -1,0 +1,63 @@
+diff -uprN org/drivers/gpu/drm/drm_ioctl.c mod/drivers/gpu/drm/drm_ioctl.c
+--- org/drivers/gpu/drm/drm_ioctl.c	2018-05-16 18:14:31.304407300 +0800
++++ mod/drivers/gpu/drm/drm_ioctl.c	2018-05-17 16:50:02.765787564 +0800
+@@ -508,11 +508,11 @@ int drm_ioctl_permit(u32 flags, struct d
+ 		     !file_priv->authenticated))
+ 		return -EACCES;
+ 
+-	/* MASTER is only for master or control clients */
++	/* MASTER is only for master or control clients 
+ 	if (unlikely((flags & DRM_MASTER) && 
+ 		     !drm_is_current_master(file_priv) &&
+ 		     !drm_is_control_client(file_priv)))
+-		return -EACCES;
++		return -EACCES;*/
+ 
+ 	/* Control clients must be explicitly allowed */
+ 	if (unlikely(!(flags & DRM_CONTROL_ALLOW) &&
+diff -uprN org/drivers/gpu/drm/rcar-du/rcar_du_plane.c mod/drivers/gpu/drm/rcar-du/rcar_du_plane.c
+--- org/drivers/gpu/drm/rcar-du/rcar_du_plane.c	2018-05-16 18:14:31.620406400 +0800
++++ mod/drivers/gpu/drm/rcar-du/rcar_du_plane.c	2018-05-17 16:21:31.953640300 +0800
+@@ -666,7 +666,7 @@ static void rcar_du_plane_reset(struct d
+ 	state->source = RCAR_DU_PLANE_MEMORY;
+ 	state->alpha = 255;
+ 	state->colorkey = RCAR_DU_COLORKEY_NONE;
+-	state->state.zpos = plane->type == DRM_PLANE_TYPE_PRIMARY ? 0 : 1;
++	state->state.zpos = 1;
+ 
+ 	plane->state = &state->state;
+ 	plane->state->plane = plane;
+@@ -765,8 +765,8 @@ int rcar_du_planes_init(struct rcar_du_g
+ 		drm_plane_helper_add(&plane->plane,
+ 				     &rcar_du_plane_helper_funcs);
+ 
+-		if (type == DRM_PLANE_TYPE_PRIMARY)
+-			continue;
++		/*if (type == DRM_PLANE_TYPE_PRIMARY)
++			continue;*/
+ 
+ 		drm_object_attach_property(&plane->plane.base,
+ 					   rcdu->props.alpha, 255);
+diff -uprN org/drivers/gpu/drm/rcar-du/rcar_du_vsp.c mod/drivers/gpu/drm/rcar-du/rcar_du_vsp.c
+--- org/drivers/gpu/drm/rcar-du/rcar_du_vsp.c	2018-05-16 18:14:31.620406400 +0800
++++ mod/drivers/gpu/drm/rcar-du/rcar_du_vsp.c	2018-05-17 16:22:23.417478498 +0800
+@@ -364,7 +364,7 @@ static void rcar_du_vsp_plane_reset(stru
+ 	state->alpha = 255;
+ 	state->colorkey = RCAR_DU_COLORKEY_NONE;
+ 	state->colorkey_alpha = 0;
+-	state->state.zpos = plane->type == DRM_PLANE_TYPE_PRIMARY ? 0 : 1;
++	state->state.zpos = 1;
+ 
+ 	plane->state = &state->state;
+ 	plane->state->plane = plane;
+@@ -583,8 +583,8 @@ int rcar_du_vsp_init(struct rcar_du_vsp
+ 		drm_plane_helper_add(&plane->plane,
+ 				     &rcar_du_vsp_plane_helper_funcs);
+ 
+-		if (type == DRM_PLANE_TYPE_PRIMARY)
+-			continue;
++		/*if (type == DRM_PLANE_TYPE_PRIMARY)
++			continue;*/
+ 
+ 		drm_object_attach_property(&plane->plane.base,
+ 					   rcdu->props.alpha, 255);
