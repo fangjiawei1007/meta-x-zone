@@ -9,9 +9,5 @@
 ###########################################################
 
 ################ X-Zone Test Patch ########################
-#patch 0001-thermal-rcar_gen3_thermal-disable-interrupt-in-.remo.patch
-#patch 0002-thermal-rcar_gen3_thermal-Fix-init-value-of-IRQCTL-r.patch
-#patch 0003-thermal-rcar_gen3_thermal-fix-interrupt-type.patch
-#patch 0004-arm64-dts-r8a7796-salvator-xs-2x4g-Disable-HS400.patch
 patch 0005-Add-X-Zone-dts-files.patch
- 
+patch 0006-Add-X-Zone-CAN-Support.patch 

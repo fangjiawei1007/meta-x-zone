@@ -1,7 +1,7 @@
 From 1e774306a3d1c6851cee29b6e582fd584b2299a7 Mon Sep 17 00:00:00 2001
 From: Fang Jiawei <fangjiawei1007@gmail.com>
 Date: Mon, 20 Apr 2020 09:19:24 +0000
-Subject: [PATCH] Add X-Zone dts files
+Subject: [PATCH 5/6] Add X-Zone dts files
 
 ---
  arch/arm64/boot/dts/renesas/Makefile               |   4 +-
