@@ -10,4 +10,5 @@
 
 ################ X-Zone Test Patch ########################
 patch 0005-Add-X-Zone-dts-files.patch
-patch 0006-Add-X-Zone-CAN-Support.patch 
+patch 0006-Add-X-Zone-CAN-Support.patch
+patch 0007-Remove-SD-Card-dts.patch 
