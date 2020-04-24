@@ -1,0 +1,267 @@
+From 7d0306d8800bad0e140bb9bba3f3b371b6dc5921 Mon Sep 17 00:00:00 2001
+From: Fang Jiawei <fangjiawei1007@gmail.com>
+Date: Fri, 24 Apr 2020 05:12:09 +0000
+Subject: [PATCH] Add Audio dts support and i2c dts modify
+
+---
+ arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts |   3 +-
+ arch/arm64/boot/dts/renesas/x-zone-common.dtsi | 155 +++++++++++++++++++------
+ arch/arm64/boot/dts/renesas/x-zone.dtsi        |   1 -
+ 3 files changed, 121 insertions(+), 38 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts b/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
+index 9f0e7e3..513c11f 100644
+--- a/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
++++ b/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
+@@ -117,7 +117,8 @@
+ &sound_card {
+ 	dais = <&rsnd_port0	/* ak4613 */
+ 		&rsnd_port1	/* HDMI0  */
+-		&rsnd_port2>;	/* HDMI1  */
++		&rsnd_port2	/* HDMI1  */
++		&rsnd_port3>;	/* A2B	  */
+ };
+ 
+ &hdmi0 {
+diff --git a/arch/arm64/boot/dts/renesas/x-zone-common.dtsi b/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
+index c79176e..644b066 100644
+--- a/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
++++ b/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
+@@ -309,6 +309,10 @@
+ 	clock-frequency = <22579200>;
+ };
+ 
++&audio_clk_b {
++	clock-frequency = <24576000>;
++};
++
+ &avb {
+ 	pinctrl-0 = <&avb_pins>;
+ 	pinctrl-names = "default";
+@@ -396,51 +400,45 @@
+ 	status = "okay";
+ };
+ 
+-&i2c2 {
+-	pinctrl-0 = <&i2c2_pins>;
++&i2c0 {
++	pinctrl-0 = <&i2c0_pins>;
+ 	pinctrl-names = "default";
+ 
+ 	status = "okay";
++	/*FUSB308B -> 0xA0*/
++	/*AD2428W -> 0x6E*/
++	ad2428w: a2b@6e {
++		compatible = "adi,ad2428w";
+ 
+-	clock-frequency = <100000>;
+-
+-	ak4613: codec@10 {
+-		compatible = "asahi-kasei,ak4613";
+-		#sound-dai-cells = <0>;
+-		reg = <0x10>;
+-		clocks = <&rcar_sound 3>;
+-
+-		asahi-kasei,in1-single-end;
+-		asahi-kasei,in2-single-end;
+-		asahi-kasei,out1-single-end;
+-		asahi-kasei,out2-single-end;
+-		asahi-kasei,out3-single-end;
+-		asahi-kasei,out4-single-end;
+-		asahi-kasei,out5-single-end;
+-		asahi-kasei,out6-single-end;
+-
++		reg = <0x6e>;
+ 		port {
+-			ak4613_endpoint: endpoint {
+-				remote-endpoint = <&rsnd_endpoint0>;
++			ad2428w_endpoint: endpoint {
++				remote-endpoint = <&rsnd_endpoint3>;
+ 			};
+ 		};
+ 	};
++};
+ 
+-	cs2000: clk_multiplier@4f {
+-		#clock-cells = <0>;
+-		compatible = "cirrus,cs2000-cp";
+-		reg = <0x4f>;
+-		clocks = <&audio_clkout>, <&x12_clk>;
+-		clock-names = "clk_in", "ref_clk";
+ 
+-		assigned-clocks = <&cs2000>;
+-		assigned-clock-rates = <24576000>; /* 1/1 divide */
+-	};
++
++
++&i2c3{
++	pinctrl-0 = <&i2c3_pins>;
++	pinctrl-names = "default";
++
++	status = "okay";
++	/*TW9992 -> 0x28 need to be confirmed: whether 0x28 or 0x88*/
++	/*DS90UB954 -> 0x60*/
+ };
+ 
++
++
++
++
+ &i2c4 {
+ 	status = "okay";
+-
++	/*DS90UB925 -> 0x18*/
++	/*DS90UB949 -> 0x34*/
+ 	pca9654: gpio@20 {
+ 		compatible = "onnn,pca9654";
+ 		reg = <0x20>;
+@@ -512,6 +510,54 @@
+ 	};
+ };
+ 
++&i2c5 {
++	pinctrl-0 = <&i2c5_pins>;
++	pinctrl-names = "default";
++
++	status = "okay";
++
++	clock-frequency = <100000>;
++
++	ak4613: codec@20 {
++		compatible = "asahi-kasei,ak4613";
++		#sound-dai-cells = <0>;
++		reg = <0x20>;
++		clocks = <&rcar_sound 3>;
++
++		asahi-kasei,in1-single-end;
++		asahi-kasei,in2-single-end;
++		asahi-kasei,out1-single-end;
++		asahi-kasei,out2-single-end;
++		asahi-kasei,out3-single-end;
++		asahi-kasei,out4-single-end;
++		asahi-kasei,out5-single-end;
++		asahi-kasei,out6-single-end;
++
++		port {
++			ak4613_endpoint: endpoint {
++				remote-endpoint = <&rsnd_endpoint0>;
++			};
++		};
++	};
++
++	/*TDA75610S -> 0x6E*/
++	tda75610s: tda75610s@da {
++		compatible = "st,tda75610s";
++
++		reg = <0xda>;
++	};
++};
++
++&i2c6 {
++	pinctrl-0 = <&i2c6_pins>;
++	pinctrl-names = "default";
++	status = "okay";
++	/*EXT_UB949 -> 0x18*/
++	/*EXT_UB954 -> 0x70*/
++	/*EXT_UB947 -> 0x34*/
++};
++
++
+ &i2c_dvfs {
+ 	status = "okay";
+ 
+@@ -606,12 +652,33 @@
+ 		groups = "hscif1_data_a", "hscif1_ctrl_a";
+ 		function = "hscif1";
+ 	};
+-
++/*
+ 	i2c2_pins: i2c2 {
+ 		groups = "i2c2_a";
+ 		function = "i2c2";
+ 	};
++*/
++	
++	i2c0_pins: i2c0 {
++		groups = "i2c0";
++		function = "i2c0";
++	};
++	
++	i2c3_pins: i2c3 {
++		groups = "i2c3";
++		function = "i2c3";
++	};
+ 
++	i2c5_pins: i2c5 {
++		groups = "i2c5";
++		function = "i2c5";
++	};
++
++	i2c6_pins: i2c6 {
++		groups = "i2c6_a";
++		function = "i2c6";
++	};
++	
+ 	irq0_pins: irq0 {
+ 		groups = "intc_ex_irq0";
+ 		function = "intc_ex";
+@@ -682,7 +749,10 @@
+ 	};
+ 
+ 	sound_pins: sound {
+-		groups = "ssi01239_ctrl", "ssi0_data", "ssi1_data_a";
++		groups = "ssi78_ctrl", "ssi7_data", "ssi8_data",
++		         "ssi349_ctrl","ssi3_data","ssi4_data",
++		         "ssi01239_ctrl","ssi0_data","ssi1_data_a",
++			 "ssi2_data_a","ssi9_data_a";
+ 		function = "ssi";
+ 	};
+ 
+@@ -762,7 +832,7 @@
+ 		 <&cpg CPG_MOD 1020>, <&cpg CPG_MOD 1021>,
+ 		 <&cpg CPG_MOD 1020>, <&cpg CPG_MOD 1021>,
+ 		 <&cpg CPG_MOD 1019>, <&cpg CPG_MOD 1018>,
+-		 <&audio_clk_a>, <&cs2000>,
++		 <&audio_clk_a>, <&audio_clk_b>,
+ 		 <&audio_clk_c>,
+ 		 <&cpg CPG_CORE CPG_AUDIO_CLK_I>;
+ 
+@@ -778,8 +848,21 @@
+ 				bitclock-master = <&rsnd_endpoint0>;
+ 				frame-master = <&rsnd_endpoint0>;
+ 
+-				playback = <&ssi0 &src0 &dvc0>;
+-				capture  = <&ssi1 &src1 &dvc1>;
++				playback = <&ssi7>;
++				capture  = <&ssi8>;
++			};
++		};
++		rsnd_port3: port@3 {
++			reg = <3>;
++			rsnd_endpoint3: endpoint {
++			remote-endpoint = <&ad2428w_endpoint>;
++			dai-format = "i2s";				
++			bitclock-master = <&rsnd_endpoint3>;
++			frame-master = <&rsnd_endpoint3>;
++
++			/* need to be done, use not only SSI0,SSI1, but SSI2,SSI9 */
++			playback = <&ssi0 &src0 &dvc0>;
++			capture  = <&ssi1 &src1 &dvc1>;
+ 			};
+ 		};
+ 	};
+diff --git a/arch/arm64/boot/dts/renesas/x-zone.dtsi b/arch/arm64/boot/dts/renesas/x-zone.dtsi
+index dc213c5..1ec5d36 100644
+--- a/arch/arm64/boot/dts/renesas/x-zone.dtsi
++++ b/arch/arm64/boot/dts/renesas/x-zone.dtsi
+@@ -17,7 +17,6 @@
+ };
+ 
+ &i2c4 {
+-	clock-frequency = <400000>;
+ 
+ 	versaclock6: clock-generator@6a {
+ 		compatible = "idt,5p49v6901";
+-- 
+2.7.4
+
