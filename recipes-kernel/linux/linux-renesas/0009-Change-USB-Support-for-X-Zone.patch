@@ -1,0 +1,79 @@
+From d5b32984c42c9f87fe9758fbbd4fa8d52322cca6 Mon Sep 17 00:00:00 2001
+From: Fang Jiawei <fangjiawei1007@gmail.com>
+Date: Mon, 27 Apr 2020 09:34:43 +0000
+Subject: [PATCH] Change USB Support for X-Zone
+
+---
+ arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts | 35 --------------------------
+ arch/arm64/boot/dts/renesas/x-zone-common.dtsi |  2 +-
+ 2 files changed, 1 insertion(+), 36 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts b/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
+index 513c11f..7046c0d 100644
+--- a/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
++++ b/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
+@@ -217,28 +217,6 @@
+ };
+ 
+ &pfc {
+-	usb2_pins: usb2 {
+-		groups = "usb2";
+-		function = "usb2";
+-	};
+-
+-	/*
+-	 * - On Salvator-X[S], GP6_3[01] are connected to ADV7482 as irq pins
+-	 *   (when SW31 is the default setting on Salvator-XS).
+-	 * - If SW31 is the default setting, you cannot use USB2.0 ch3 on
+-	 *   r8a7795 with Salvator-XS.
+-	 *   Hence the SW31 setting must be changed like 2) below.
+-	 *   1) Default setting of SW31: ON-ON-OFF-OFF-OFF-OFF:
+-	 *	- Connect GP6_3[01] to ADV7842.
+-	 *   2) Changed setting of SW31: OFF-OFF-ON-ON-ON-ON:
+-	 *	- Connect GP6_3[01] to BD082065 (USB2.0 ch3's host power).
+-	 *	- Connect GP6_{04,21} to ADV7842.
+-	 */
+-	usb2_ch3_pins: usb2_ch3 {
+-		groups = "usb2_ch3";
+-		function = "usb2_ch3";
+-
+-	};
+ 	
+ 	/**FJW Add X-Zone CAN Support**/
+ 	can0_pins: can0_data_a{
+@@ -253,19 +231,6 @@
+ 	/*******************************/
+ };
+ 
+-&usb2_phy2 {
+-	pinctrl-0 = <&usb2_pins>;
+-	pinctrl-names = "default";
+-
+-	status = "okay";
+-};
+-
+-&usb2_phy3 {
+-	pinctrl-0 = <&usb2_ch3_pins>;
+-	pinctrl-names = "default";
+-
+-	status = "okay";
+-};
+ 
+ &vspbc {
+ 	status = "okay";
+diff --git a/arch/arm64/boot/dts/renesas/x-zone-common.dtsi b/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
+index 644b066..a0cef4a 100644
+--- a/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
++++ b/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
+@@ -321,7 +321,7 @@
+ 	status = "okay";
+ 
+ 	phy0: ethernet-phy@0 {
+-		rxc-skew-ps = <1500>;
++	//	rxc-skew-ps = <1500>;
+ 		reg = <0>;
+ 		interrupt-parent = <&gpio2>;
+ 		interrupts = <11 IRQ_TYPE_LEVEL_LOW>;
+-- 
+2.7.4
+
