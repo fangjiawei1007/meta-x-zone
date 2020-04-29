@@ -1,0 +1,72 @@
+From 2ca55ddf00e5da5ab473b369dcde0a1a05bfe7dd Mon Sep 17 00:00:00 2001
+From: Fang Jiawei <fangjiawei1007@gmail.com>
+Date: Wed, 29 Apr 2020 02:00:30 +0000
+Subject: [PATCH] Change Serial dts
+
+---
+ arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts | 13 +++++++++++++
+ arch/arm64/boot/dts/renesas/x-zone-common.dtsi |  6 +++---
+ 2 files changed, 16 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts b/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
+index 7046c0d..a359567 100644
+--- a/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
++++ b/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
+@@ -229,6 +229,13 @@
+ 		function = "can1";	
+ 	};
+ 	/*******************************/
++
++	scif0_pins: scif0_data{
++		groups = "scif0_data";
++		function = "scif0";
++	};
++
++
+ };
+ 
+ 
+@@ -259,3 +266,9 @@
+         pinctrl-names = "default";
+         status = "okay";
+ };
++
++&scif0{
++	pinctrl-0 = <&scif0_pins>;
++	pinctrl-names = "default";
++	status = "okay";
++};
+diff --git a/arch/arm64/boot/dts/renesas/x-zone-common.dtsi b/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
+index a0cef4a..51c1966 100644
+--- a/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
++++ b/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
+@@ -649,7 +649,7 @@
+ 	};
+ 
+ 	hscif1_pins: hscif1 {
+-		groups = "hscif1_data_a", "hscif1_ctrl_a";
++		groups = "hscif1_data_a";
+ 		function = "hscif1";
+ 	};
+ /*
+@@ -695,7 +695,7 @@
+ 	};
+ 
+ 	scif1_pins: scif1 {
+-		groups = "scif1_data_a", "scif1_ctrl";
++		groups = "scif1_data_a";
+ 		function = "scif1";
+ 	};
+ 
+@@ -877,7 +877,7 @@
+ 	pinctrl-0 = <&scif1_pins>;
+ 	pinctrl-names = "default";
+ 
+-	uart-has-rtscts;
++//	uart-has-rtscts;
+ 	/* Please use exclusively to the hscif1 node */
+ 	status = "okay";
+ };
+-- 
+2.7.4
+
