@@ -1,0 +1,122 @@
+From dfe28cdbef00a480123275c0e52589aabe29928b Mon Sep 17 00:00:00 2001
+From: Fang Jiawei <fangjiawei1007@gmail.com>
+Date: Wed, 29 Apr 2020 08:27:55 +0000
+Subject: [PATCH] Add Murata 89359 dts
+
+---
+ arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts |  3 +-
+ arch/arm64/boot/dts/renesas/x-zone-common.dtsi | 54 ++++++++++++++++++++++++++
+ 2 files changed, 56 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts b/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
+index a359567..e17fe8b 100644
+--- a/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
++++ b/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
+@@ -118,7 +118,8 @@
+ 	dais = <&rsnd_port0	/* ak4613 */
+ 		&rsnd_port1	/* HDMI0  */
+ 		&rsnd_port2	/* HDMI1  */
+-		&rsnd_port3>;	/* A2B	  */
++		&rsnd_port3	/* A2B	  */
++		&rsnd_port4>;   /*Bluetooth*/
+ };
+ 
+ &hdmi0 {
+diff --git a/arch/arm64/boot/dts/renesas/x-zone-common.dtsi b/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
+index 51c1966..d59fd89 100644
+--- a/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
++++ b/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
+@@ -387,6 +387,14 @@
+ 	clock-frequency = <32768>;
+ };
+ 
++&hscif0 {
++	pinctrl-0 = <&hscif0_pins>;
++	pinctrl-names = "default";
++	uart-has-rtscts;
++
++	status = "okay";
++};
++
+ &hscif1 {
+ 	pinctrl-0 = <&hscif1_pins>;
+ 	pinctrl-names = "default";
+@@ -619,8 +627,19 @@
+ 
+ &pciec1 {
+ 	status = "okay";
++	/*bluetooth_wifi*/
++
++	lbee6zz1fd: bluetooth_wifi {
++		compatible = "murata,lbee6zz1fd";
++		port {
++			lbee6zz1fd_endpoint: endpoint {
++				remote-endpoint = <&rsnd_endpoint4>;
++			};
++		};
++	};
+ };
+ 
++
+ &pfc {
+ 	pinctrl-0 = <&scif_clk_pins>;
+ 	pinctrl-names = "default";
+@@ -648,6 +667,12 @@
+ 		function = "du";
+ 	};
+ 
++	hscif0_pins: hscif0 {
++		groups = "hscif0_data", "hscif0_ctrl";
++		function = "hscif0";
++	};
++
++
+ 	hscif1_pins: hscif1 {
+ 		groups = "hscif1_data_a";
+ 		function = "hscif1";
+@@ -865,6 +890,19 @@
+ 			capture  = <&ssi1 &src1 &dvc1>;
+ 			};
+ 		};
++		rsnd_port4: port@4 {
++			reg = <4>;
++			rsnd_endpoint4: endpoint {
++			remote-endpoint = <&lbee6zz1fd_endpoint>;
++
++			dai-format = "left_j";				
++			bitclock-master = <&rsnd_endpoint4>;
++			frame-master = <&rsnd_endpoint4>;
++
++			playback = <&ssi3>;
++			capture  = <&ssi4>;
++			};
++		};
+ 	};
+ };
+ 
+@@ -950,6 +988,22 @@
+ 	shared-pin;
+ };
+ 
++&ssi2 {
++	shared-pin;
++};
++
++&ssi4 {
++	shared-pin;
++};
++
++&ssi8 {
++	shared-pin;
++};
++
++&ssi9 {
++	shared-pin;
++};
++
+ &usb_extal_clk {
+ 	clock-frequency = <50000000>;
+ };
+-- 
+2.7.4
+

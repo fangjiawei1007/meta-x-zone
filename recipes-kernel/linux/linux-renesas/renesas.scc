@@ -15,3 +15,4 @@ patch 0007-Remove-SD-Card-dts.patch
 patch 0008-Add-Audio-dts-support-and-i2c-dts-modify.patch
 patch 0009-Change-USB-Support-for-X-Zone.patch
 patch 0010-Change-Serial-dts.patch 
+patch 0011-Add-Murata-89359-dts.patch
