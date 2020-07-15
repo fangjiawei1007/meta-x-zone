@@ -10,13 +10,9 @@ FILESEXTRAPATHS_prepend := "${THISDIR}/files:"
 #ATFW_OPT_append += " ${@oe.utils.conditional("DISABLE_RPC_ACCESS", "1", " RCAR_DISABLE_NONSECURE_RPC_ACCESS=1", "", d)}"
 #ATFW_OPT_append += " LIFEC_DBSC_PROTECT_ENABLE=0"
 
-#SRC_URI_append = " \
-#    file://0001-plat-renesas-rcar-Make-RPC-secure-settings-optional.patch \
-#    file://0002-kingfisher-reboot-fix-power-off-on-reset.patch \
-#    file://0003-plat-renesas-rcar-Add-R-Car-V3M-support.patch \
-#    file://0004-plat-renesas-rcar-Add-R-Car-V3H-support.patch \
-#    file://0005-lib-psci-Fix-CPU0-offline-issue-on-the-V3x-SoCs.patch \
-#"
+SRC_URI_append = " \
+    file://0001-ipl-renesas.patch \
+"
 
 #do_ipl_opt_deploy_append () {
 #    install -m 0644 ${S}/tools/dummy_create/bootparam_sa0.bin ${DEPLOYDIR}/bootparam_sa0-${EXTRA_ATFW_CONF}.bin

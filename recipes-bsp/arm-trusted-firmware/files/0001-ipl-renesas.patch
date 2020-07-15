@@ -1,0 +1,129 @@
+From f62505a16c88f0d0b86026c831ccdb468574e474 Mon Sep 17 00:00:00 2001
+From: Fang Jiawei <fangjiawei1007@gmail.com>
+Date: Tue, 14 Jul 2020 08:07:06 +0000
+Subject: [PATCH] ipl-renesas
+
+---
+ plat/renesas/rcar/bl2_rcar_setup.c           | 11 ++++++++++-
+ plat/renesas/rcar/ddr/ddr_b/boot_init_dram.c | 20 ++++++++++++++++++++
+ 2 files changed, 30 insertions(+), 1 deletion(-)
+
+diff --git a/plat/renesas/rcar/bl2_rcar_setup.c b/plat/renesas/rcar/bl2_rcar_setup.c
+index 516ab09..3424b81 100644
+--- a/plat/renesas/rcar/bl2_rcar_setup.c
++++ b/plat/renesas/rcar/bl2_rcar_setup.c
+@@ -39,6 +39,13 @@
+ #endif /* PMIC_ROHM_BD9571 && RCAR_SYSTEM_RESET_KEEPON_DDR */
+ 
+ 
++
++/*********************X-Zone DEBUG**************************/
++
++#define XZone_Debug
++
++/***********************************************************/
++
+ /* CPG write protect registers */
+ /*#define	CPG_CPGWPR		(CPG_BASE + 0x900U)*/
+ /*#define	CPG_CPGWPCR		(CPG_BASE + 0x904U)*/
+@@ -263,6 +270,7 @@ struct bl31_params *bl2_plat_get_bl31_params(void)
+  ******************************************************************************/
+ struct entry_point_info *bl2_plat_get_bl31_ep_info(void)
+ {
++	#ifndef XZone_Debug
+ 	if (isDdrBackupMode() != 0U) {
+ 
+ 		NOTICE("BL2: Skip loading images. (SuspendToRAM)\n");
+@@ -282,7 +290,8 @@ struct entry_point_info *bl2_plat_get_bl31_ep_info(void)
+ 
+ 		bl2_run_next_image(bl31_ep_info);
+ 	}
+-
++	#endif
++	
+ 	bl31_ep_info->args.arg1 = 0x00000000UL;	/* cold boot */
+ 	return bl31_ep_info;
+ }
+diff --git a/plat/renesas/rcar/ddr/ddr_b/boot_init_dram.c b/plat/renesas/rcar/ddr/ddr_b/boot_init_dram.c
+index 09f2f04..2791de7 100644
+--- a/plat/renesas/rcar/ddr/ddr_b/boot_init_dram.c
++++ b/plat/renesas/rcar/ddr/ddr_b/boot_init_dram.c
+@@ -22,6 +22,15 @@
+ #define DDR_BACKUPMODE
+ #define FATAL_MSG(x) NOTICE(x)
+ 
++/********X-Zone Debug***********/
++
++#define XZone_Debug
++
++/*******************************/
++
++
++
++
+ /*******************************************************************************
+  *	variables
+  ******************************************************************************/
+@@ -118,10 +127,13 @@ static uint32_t _cnf_DDR_PHY_ADR_G_REGSET[DDR_PHY_REGSET_MAX];
+ static uint32_t _cnf_DDR_PI_REGSET[DDR_PI_REGSET_MAX];
+ static uint32_t Pll3Mode;
+ static uint32_t loop_max;
++#ifndef XZone_Debug
++
+ #ifdef DDR_BACKUPMODE
+ uint32_t ddrBackup;
+ /* #define DDR_BACKUPMODE_HALF		//for Half channel(ch0, 1 only) */
+ #endif
++#endif
+ 
+ #ifdef ddr_qos_init_setting /* only for non qos_init */
+ #define OPERATING_FREQ			(400U)		/* Mhz */
+@@ -2232,6 +2244,7 @@ static void dbsc_regset_post(void)
+ 	dataL = (get_refperiod()) * ddr_mbps / 2000 / ddr_mbpsdiv;
+ 	mmio_write_32(DBSC_DBRFCNF1, 0x00080000 | (dataL & 0x0000ffff));
+ 	mmio_write_32(DBSC_DBRFCNF2, 0x00010000 | DBSC_REFINTS);
++#ifndef XZone_Debug
+ #ifdef DDR_BACKUPMODE
+ 	if (ddrBackup == DRAM_BOOT_STATUS_WARM) {
+ #ifdef DDR_BACKUPMODE_HALF		/* for Half channel(ch0, 1 only) */
+@@ -2262,6 +2275,9 @@ static void dbsc_regset_post(void)
+ #endif /* DDR_BACKUPMODE_HALF */
+ 	}
+ #endif /* DDR_BACKUPMODE */
++
++#endif /*X-Zone DEbug*/
++
+ #if RCAR_REWT_TRAINING != 0
+ 	/* Periodic-WriteDQ Training seeting */
+ 	if (((Prr_Product == PRR_PRODUCT_H3) && (Prr_Cut <= PRR_PRODUCT_11))
+@@ -2762,9 +2778,11 @@ static uint32_t init_ddr(void)
+ 
+ 	MSG_LF("init_ddr:0\n");
+ 
++#ifndef XZone_Debug
+ #ifdef DDR_BACKUPMODE
+ 	dram_get_boot_status(&ddrBackup);
+ #endif
++#endif
+ 
+ 	/***********************************************************************
+ 	 * unlock phy
+@@ -2826,6 +2844,7 @@ static uint32_t init_ddr(void)
+ 	/***********************************************************************
+ 	 * ddr backupmode end
+ 	 ***********************************************************************/
++#ifndef XZone_Debug
+ #ifdef DDR_BACKUPMODE
+ 	if (ddrBackup)
+ 		NOTICE("BL2: [WARM_BOOT]\n");
+@@ -2838,6 +2857,7 @@ static uint32_t init_ddr(void)
+ 		return INITDRAM_ERR_I;
+ 	}
+ #endif
++#endif
+ 	MSG_LF("init_ddr:3\n");
+ 
+ 	/***********************************************************************
+-- 
+2.7.4
+
