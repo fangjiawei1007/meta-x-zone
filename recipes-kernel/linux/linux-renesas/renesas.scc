@@ -17,3 +17,4 @@ patch 0009-Change-USB-Support-for-X-Zone.patch
 patch 0010-Change-Serial-dts.patch 
 patch 0011-Add-Murata-89359-dts.patch
 patch 0012-Add-Renesas-Patch.patch
+patch 0013-Disabled-rcar_sound_driver-to-Start-Kernel.patch

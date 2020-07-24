@@ -1,0 +1,34 @@
+From 2d2aec3a71efd5a67d4f463cc6d058836c3e6860 Mon Sep 17 00:00:00 2001
+From: Fang Jiawei <fangjiawei1007@gmail.com>
+Date: Fri, 24 Jul 2020 06:10:41 +0000
+Subject: [PATCH] Disabled rcar_sound_driver to Start Kernel
+
+---
+ arch/arm64/boot/dts/renesas/x-zone-common.dtsi | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/renesas/x-zone-common.dtsi b/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
+index ef62ece..ac9d39e 100644
+--- a/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
++++ b/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
+@@ -520,7 +520,7 @@
+ 	pinctrl-0 = <&i2c5_pins>;
+ 	pinctrl-names = "default";
+ 
+-	status = "okay";
++	status = "disabled";
+ 
+ 	clock-frequency = <100000>;
+ 
+@@ -822,7 +822,7 @@
+ 	#clock-cells = <1>;
+ 	clock-frequency = <12288000 11289600>;
+ 
+-	status = "okay";
++	status = "disabled";
+ 
+ 	/* update <audio_clk_b> to <cs2000> */
+ 	clocks = <&cpg CPG_MOD 1005>,
+-- 
+2.7.4
+
