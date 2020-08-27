@@ -1,0 +1,298 @@
+From 95e6df3ac326e13434c1e02cc44c897fe0a1432c Mon Sep 17 00:00:00 2001
+From: Fang Jiawei <fangjiawei1007@gmail.com>
+Date: Thu, 27 Aug 2020 08:52:39 +0000
+Subject: [PATCH] Add HDMI Support
+
+---
+ .../boot/dts/renesas/r8a7795-es1-salvator-x.dts    |  3 +-
+ arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts     | 16 ++++----
+ arch/arm64/boot/dts/renesas/r8a7795.dtsi           | 12 +++---
+ arch/arm64/boot/dts/renesas/x-zone-common.dtsi     | 27 +++++++-------
+ drivers/gpu/drm/bridge/synopsys/dw-hdmi.c          | 43 ++++++++++++++++++++--
+ 5 files changed, 70 insertions(+), 31 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/renesas/r8a7795-es1-salvator-x.dts b/arch/arm64/boot/dts/renesas/r8a7795-es1-salvator-x.dts
+index 4b10211..39b2d3b 100644
+--- a/arch/arm64/boot/dts/renesas/r8a7795-es1-salvator-x.dts
++++ b/arch/arm64/boot/dts/renesas/r8a7795-es1-salvator-x.dts
+@@ -99,7 +99,8 @@
+ 	clock-names = "du.0", "du.1", "du.2", "du.3",
+ 		      "dclkin.0", "dclkin.1", "dclkin.2", "dclkin.3";
+ };
+-
++*/
++/*
+ &lvds0 {
+ 	ports {
+ 		port@1 {
+diff --git a/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts b/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
+index 1ddb847..305d89e 100644
+--- a/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
++++ b/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
+@@ -86,20 +86,20 @@
+ 	status = "okay";
+ 	memory-region = <&adsp_reserved>;
+ };
+-/*
++
+ &du {
+ 	clocks = <&cpg CPG_MOD 724>,
+ 		 <&cpg CPG_MOD 723>,
+ 		 <&cpg CPG_MOD 722>,
+ 		 <&cpg CPG_MOD 721>,
+-		 <&versaclock6 1>,
++//		 <0>,
+ 		 <&x21_clk>,
+-		 <&x22_clk>,
+-		 <&versaclock6 2>;
++		 <&x22_clk>;
++//		 <0>;
+ 	clock-names = "du.0", "du.1", "du.2", "du.3",
+-		      "dclkin.0", "dclkin.1", "dclkin.2", "dclkin.3";
++		      "dclkin.1", "dclkin.2";
+ };
+-*/
++
+ &ehci2 {
+ 	status = "okay";
+ };
+@@ -143,7 +143,7 @@
+ &hdmi0_con {
+ 	remote-endpoint = <&rcar_dw_hdmi0_out>;
+ };
+-
++*/
+ &hdmi1 {
+ 	status = "okay";
+ 
+@@ -166,7 +166,7 @@
+ &hdmi1_con {
+ 	remote-endpoint = <&rcar_dw_hdmi1_out>;
+ };
+-
++/*
+ &lvds0 {
+ 	ports {
+ 		port@1 {
+diff --git a/arch/arm64/boot/dts/renesas/r8a7795.dtsi b/arch/arm64/boot/dts/renesas/r8a7795.dtsi
+index 8364db0..78d25d9 100644
+--- a/arch/arm64/boot/dts/renesas/r8a7795.dtsi
++++ b/arch/arm64/boot/dts/renesas/r8a7795.dtsi
+@@ -3377,7 +3377,7 @@
+ 				};
+ 			};
+ 		};
+-		/*
++
+ 		hdmi0: hdmi@fead0000 {
+ 			compatible = "renesas,r8a7795-hdmi", "renesas,rcar-gen3-hdmi";
+ 			reg = <0 0xfead0000 0 0x10000>;
+@@ -3401,9 +3401,9 @@
+ 					reg = <1>;
+ 				};
+ 				port@2 {
+-					*/
++					
+ 					/* HDMI sound */
+-					/*					
++										
+ 					reg = <2>;
+ 				};
+ 			};
+@@ -3432,9 +3432,9 @@
+ 					reg = <1>;
+ 				};
+ 				port@2 {
+-					*/
++					
+ 					/* HDMI sound */
+-					/*
++					
+ 					reg = <2>;
+ 				};
+ 			};
+@@ -3516,7 +3516,7 @@
+ 				};
+ 			};
+ 		};
+-*/
++
+ 		prr: chipid@fff00044 {
+ 			compatible = "renesas,prr";
+ 			reg = <0 0xfff00044 0 4>;
+diff --git a/arch/arm64/boot/dts/renesas/x-zone-common.dtsi b/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
+index 1794e1f..b3480ee 100644
+--- a/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
++++ b/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
+@@ -234,7 +234,7 @@
+ 			};
+ 		};
+ 	};
+-
++*/
+ 	hdmi1-out {
+ 		compatible = "hdmi-connector";
+ 		label = "HDMI1 OUT";
+@@ -245,7 +245,7 @@
+ 			};
+ 		};
+ 	};
+-
++/*
+ 	vga {
+ 		compatible = "vga-connector";
+ 		no-use-ddc;
+@@ -287,7 +287,7 @@
+ 	};
+ 
+ 	/* External DU dot clocks */
+-/*	x21_clk: x21-clock {
++	x21_clk: x21-clock {
+ 		compatible = "fixed-clock";
+ 		#clock-cells = <0>;
+ 		clock-frequency = <33000000>;
+@@ -298,7 +298,7 @@
+ 		#clock-cells = <0>;
+ 		clock-frequency = <33000000>;
+ 	};
+-*/
++
+ 	x23_clk: x23-clock {
+ 		compatible = "fixed-clock";
+ 		#clock-cells = <0>;
+@@ -364,12 +364,12 @@
+ 		};
+ 	};
+ };
+-
++*/
+ &du {
+ 	pinctrl-0 = <&du_pins>;
+ 	pinctrl-names = "default";
+ 	status = "okay";
+-
++/*
+ 	ports {
+ 		port@0 {
+ 			endpoint {
+@@ -377,8 +377,9 @@
+ 			};
+ 		};
+ 	};
+-};
+ */
++};
++
+ &ehci0 {
+ 	//dr_mode = "otg";
+ 	status = "okay";
+@@ -466,9 +467,9 @@
+ 		shunt-resistor-micro-ohms = <5000>;
+ 	};
+ 
+-	ti949@0x1a{  
++	ti949@0x0c{  
+ 	        compatible = "TI,TI949";  
+-	        reg = <0x1a>;  
++	        reg = <0x0c>;  
+ 	};
+ 
+ 
+@@ -570,9 +571,9 @@
+ 	/*EXT_UB949 -> 0x18*/
+ 	/*EXT_UB954 -> 0x70*/
+ 	/*EXT_UB947 -> 0x34*/
+-	ti949@0x0c{  
++	ti949@0x1a{  
+ 		compatible = "TI,TI949";  
+-		reg = <0x0c>;  
++		reg = <0x1a>;  
+ 	};
+ 	
+ 	ti954@0x38{
+@@ -673,12 +674,12 @@
+ 			drive-strength = <12>;
+ 		};
+ 	};
+-
++*/
+ 	du_pins: du {
+ 		groups = "du_rgb888", "du_sync", "du_oddf", "du_clk_out_0";
+ 		function = "du";
+ 	};
+-	*/
++
+ 	hscif1_pins: hscif1 {
+ 		groups = "hscif1_data_a", "hscif1_ctrl_a";
+ 		function = "hscif1";
+diff --git a/drivers/gpu/drm/bridge/synopsys/dw-hdmi.c b/drivers/gpu/drm/bridge/synopsys/dw-hdmi.c
+index cedae37..72704f0 100644
+--- a/drivers/gpu/drm/bridge/synopsys/dw-hdmi.c
++++ b/drivers/gpu/drm/bridge/synopsys/dw-hdmi.c
+@@ -38,6 +38,9 @@
+ #include "dw-hdmi-audio.h"
+ #include "dw-hdmi-cec.h"
+ 
++#include <drm/drm_modes.h>
++#include <video/videomode.h>
++
+ #include <media/cec-notifier.h>
+ 
+ #define DDC_SEGMENT_ADDR	0x30
+@@ -2045,7 +2048,7 @@ static int dw_hdmi_connector_get_modes(struct drm_connector *connector)
+ 					     connector);
+ 	struct edid *edid;
+ 	int ret = 0;
+-
++#if 0
+ 	if (!hdmi->ddc)
+ 		return 0;
+ 
+@@ -2063,8 +2066,42 @@ static int dw_hdmi_connector_get_modes(struct drm_connector *connector)
+ 	} else {
+ 		dev_dbg(hdmi->dev, "failed to get edid\n");
+ 	}
+-
+-	return ret;
++#else
++	struct drm_display_mode *mode;  
++        struct videomode vm;  
++  
++        if (!connector || !hdmi) {  
++         dev_err(hdmi->dev,"connector=%p or hdmi=%p is NULL\n"
++                                                        ,connector, hdmi);  
++          return 0;  
++        }  
++  
++        vm.pixelclock = 88135920;  
++        vm.hactive = 1920;  
++        vm.hfront_porch = 42;  
++        vm.hback_porch = 42;  
++        vm.hsync_len = 10;  
++        vm.vactive = 720;  
++        vm.vfront_porch = 8;  
++        vm.vback_porch = 5;  
++        vm.vsync_len = 2;  
++        vm.flags = DISPLAY_FLAGS_VSYNC_LOW;  
++  
++        mode = drm_mode_create(connector->dev);  
++  
++        if (mode == NULL)  
++            return 0;  
++  
++        mode->type = DRM_MODE_TYPE_DRIVER;  
++  
++        drm_display_mode_from_videomode(&vm, mode);  
++        drm_mode_probed_add(connector, mode);  
++  
++#endif  
++  
++       return 1;  
++
++       //return ret;
+ }
+ 
+ static void dw_hdmi_connector_force(struct drm_connector *connector)
+-- 
+2.7.4
+
