@@ -1,0 +1,309 @@
+From 8e207871c09f145ffb4a64fe05bf36e2eb98059d Mon Sep 17 00:00:00 2001
+From: Fang Jiawei <fangjiawei1007@gmail.com>
+Date: Fri, 28 Aug 2020 03:42:34 +0000
+Subject: [PATCH] Add DU Support
+
+---
+ .../boot/dts/renesas/r8a7795-es1-salvator-x.dts    |  4 +--
+ arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts     | 22 +++++++--------
+ arch/arm64/boot/dts/renesas/r8a7795.dtsi           | 16 +++++------
+ arch/arm64/boot/dts/renesas/x-zone-common.dtsi     | 32 +++++++++++++---------
+ 4 files changed, 40 insertions(+), 34 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/renesas/r8a7795-es1-salvator-x.dts b/arch/arm64/boot/dts/renesas/r8a7795-es1-salvator-x.dts
+index 4b10211..f3e2bc1 100644
+--- a/arch/arm64/boot/dts/renesas/r8a7795-es1-salvator-x.dts
++++ b/arch/arm64/boot/dts/renesas/r8a7795-es1-salvator-x.dts
+@@ -176,7 +176,7 @@
+ 		rsnd_port1: port@1 {
+ 			reg = <1>;
+ 			rsnd_endpoint1: endpoint {
+-//				remote-endpoint = <&dw_hdmi0_snd_in>;
++				//remote-endpoint = <&dw_hdmi0_snd_in>;
+ 
+ 				dai-format = "i2s";
+ 				bitclock-master = <&rsnd_endpoint1>;
+@@ -188,7 +188,7 @@
+ 		rsnd_port2: port@2 {
+ 			reg = <2>;
+ 			rsnd_endpoint2: endpoint {
+-//				remote-endpoint = <&dw_hdmi1_snd_in>;
++				//remote-endpoint = <&dw_hdmi1_snd_in>;
+ 
+ 				dai-format = "i2s";
+ 				bitclock-master = <&rsnd_endpoint2>;
+diff --git a/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts b/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
+index 1ddb847..8d0b6b2 100644
+--- a/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
++++ b/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
+@@ -86,20 +86,20 @@
+ 	status = "okay";
+ 	memory-region = <&adsp_reserved>;
+ };
+-/*
++
+ &du {
+ 	clocks = <&cpg CPG_MOD 724>,
+ 		 <&cpg CPG_MOD 723>,
+ 		 <&cpg CPG_MOD 722>,
+ 		 <&cpg CPG_MOD 721>,
+-		 <&versaclock6 1>,
++		// <&versaclock6 1>,
+ 		 <&x21_clk>,
+-		 <&x22_clk>,
+-		 <&versaclock6 2>;
++		 <&x22_clk>;
++		// <&versaclock6 2>;
+ 	clock-names = "du.0", "du.1", "du.2", "du.3",
+-		      "dclkin.0", "dclkin.1", "dclkin.2", "dclkin.3";
++		      "dclkin.1", "dclkin.2";
+ };
+-*/
++
+ &ehci2 {
+ 	status = "okay";
+ };
+@@ -120,7 +120,7 @@
+ 		&rsnd_port2	/* HDMI1  */
+ 		&rsnd_port3>;	/* A2B	  */
+ };
+-/*
++
+ &hdmi0 {
+ 	status = "okay";
+ 
+@@ -171,12 +171,12 @@
+ 	ports {
+ 		port@1 {
+ 			lvds0_out: endpoint {
+-				remote-endpoint = <&lvds_in>;
++				//remote-endpoint = <&lvds_in>;
+ 			};
+ 		};
+ 	};
+ };
+-*/
++
+ &ohci2 {
+ 	status = "okay";
+ };
+@@ -192,7 +192,7 @@
+ 		rsnd_port1: port@1 {
+ 			reg = <1>;
+ 			rsnd_endpoint1: endpoint {
+-//				remote-endpoint = <&dw_hdmi0_snd_in>;
++				remote-endpoint = <&dw_hdmi0_snd_in>;
+ 
+ 				dai-format = "i2s";
+ 				bitclock-master = <&rsnd_endpoint1>;
+@@ -204,7 +204,7 @@
+ 		rsnd_port2: port@2 {
+ 			reg = <2>;
+ 			rsnd_endpoint2: endpoint {
+-//				remote-endpoint = <&dw_hdmi1_snd_in>;
++				remote-endpoint = <&dw_hdmi1_snd_in>;
+ 
+ 				dai-format = "i2s";
+ 				bitclock-master = <&rsnd_endpoint2>;
+diff --git a/arch/arm64/boot/dts/renesas/r8a7795.dtsi b/arch/arm64/boot/dts/renesas/r8a7795.dtsi
+index 8364db0..d5be592 100644
+--- a/arch/arm64/boot/dts/renesas/r8a7795.dtsi
++++ b/arch/arm64/boot/dts/renesas/r8a7795.dtsi
+@@ -1593,7 +1593,7 @@
+ 			compatible = "renesas,qos";
+ 			reg = <0 0xe67e0000 0 0x10090>;
+ 		};
+-/*
++
+ 		avb: ethernet@e6800000 {
+ 			compatible = "renesas,etheravb-r8a7795",
+ 				     "renesas,etheravb-rcar-gen3";
+@@ -1638,7 +1638,7 @@
+ 			#size-cells = <0>;
+ 			status = "disabled";
+ 		};
+-*/
++
+ 		can0: can@e6c30000 {
+ 			compatible = "renesas,can-r8a7795",
+ 				     "renesas,rcar-gen3-can";
+@@ -3377,7 +3377,7 @@
+ 				};
+ 			};
+ 		};
+-		/*
++		
+ 		hdmi0: hdmi@fead0000 {
+ 			compatible = "renesas,r8a7795-hdmi", "renesas,rcar-gen3-hdmi";
+ 			reg = <0 0xfead0000 0 0x10000>;
+@@ -3401,9 +3401,9 @@
+ 					reg = <1>;
+ 				};
+ 				port@2 {
+-					*/
++					
+ 					/* HDMI sound */
+-					/*					
++										
+ 					reg = <2>;
+ 				};
+ 			};
+@@ -3432,9 +3432,9 @@
+ 					reg = <1>;
+ 				};
+ 				port@2 {
+-					*/
++					
+ 					/* HDMI sound */
+-					/*
++					
+ 					reg = <2>;
+ 				};
+ 			};
+@@ -3516,7 +3516,7 @@
+ 				};
+ 			};
+ 		};
+-*/
++
+ 		prr: chipid@fff00044 {
+ 			compatible = "renesas,prr";
+ 			reg = <0 0xfff00044 0 4>;
+diff --git a/arch/arm64/boot/dts/renesas/x-zone-common.dtsi b/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
+index 6849148..c6faa8d 100644
+--- a/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
++++ b/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
+@@ -223,7 +223,7 @@
+ 		states = <3300000 1
+ 			  1800000 0>;
+ 	};
+-
++*/
+ 	hdmi0-out {
+ 		compatible = "hdmi-connector";
+ 		label = "HDMI0 OUT";
+@@ -245,7 +245,7 @@
+ 			};
+ 		};
+ 	};
+-
++/*
+ 	vga {
+ 		compatible = "vga-connector";
+ 		no-use-ddc;
+@@ -287,7 +287,7 @@
+ 	};
+ 
+ 	/* External DU dot clocks */
+-/*	x21_clk: x21-clock {
++	x21_clk: x21-clock {
+ 		compatible = "fixed-clock";
+ 		#clock-cells = <0>;
+ 		clock-frequency = <33000000>;
+@@ -298,7 +298,7 @@
+ 		#clock-cells = <0>;
+ 		clock-frequency = <33000000>;
+ 	};
+-*/
++
+ 	x23_clk: x23-clock {
+ 		compatible = "fixed-clock";
+ 		#clock-cells = <0>;
+@@ -364,12 +364,12 @@
+ 		};
+ 	};
+ };
+-
++*/
+ &du {
+ 	pinctrl-0 = <&du_pins>;
+ 	pinctrl-names = "default";
+ 	status = "okay";
+-
++/*
+ 	ports {
+ 		port@0 {
+ 			endpoint {
+@@ -379,6 +379,7 @@
+ 	};
+ };
+ */
++};
+ &ehci0 {
+ 	//dr_mode = "otg";
+ 	status = "okay";
+@@ -465,6 +466,11 @@
+ 
+ 		shunt-resistor-micro-ohms = <5000>;
+ 	};
++	ti949: ti949@0c{
++ 	        compatible = "TI,TI949";
++		reg = <0x0c>; 	
++	};
++	
+ /*
+ 	video-receiver@70 {
+ 		compatible = "adi,adv7482";
+@@ -631,7 +637,7 @@
+ &pfc {
+ 	pinctrl-0 = <&scif_clk_pins>;
+ 	pinctrl-names = "default";
+-/*
++
+ 	avb_pins: avb {
+ 		mux {
+ 			groups = "avb_link", "avb_mdio", "avb_mii";
+@@ -654,7 +660,7 @@
+ 		groups = "du_rgb888", "du_sync", "du_oddf", "du_clk_out_0";
+ 		function = "du";
+ 	};
+-	*/
++
+ 	hscif1_pins: hscif1 {
+ 		groups = "hscif1_data_a", "hscif1_ctrl_a";
+ 		function = "hscif1";
+@@ -686,12 +692,12 @@
+ 		groups = "i2c6_a";
+ 		function = "i2c6";
+ 	};
+-	
++		
+ 	irq0_pins: irq0 {
+ 		groups = "intc_ex_irq0";
+ 		function = "intc_ex";
+ 	};
+-
++/*
+ 	pwm1_pins: pwm1 {
+ 		groups = "pwm1_a";
+ 		function = "pwm1";
+@@ -701,7 +707,7 @@
+ 		groups = "pwm2_a";
+ 		function = "pwm2";
+ 	};
+-
++*/
+ 	scif1_pins: scif1 {
+ 		groups = "scif1_data_a", "scif1_ctrl";
+ 		function = "scif1";
+@@ -797,7 +803,7 @@
+ 		function = "usb30";
+ 	};
+ };
+-
++/*
+ &pwm1 {
+ 	pinctrl-0 = <&pwm1_pins>;
+ 	pinctrl-names = "default";
+@@ -811,7 +817,7 @@
+ 
+ 	status = "okay";
+ };
+-
++*/
+ &rcar_sound {
+ 	pinctrl-0 = <&sound_pins &sound_clk_pins>;
+ 	pinctrl-names = "default";
+-- 
+2.7.4
+

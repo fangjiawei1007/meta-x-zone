@@ -3,5 +3,6 @@ IMAGE_INSTALL_append = " \
     libsocketcan \
     canutils \
     mmc-utils \
+    tslib \
 "
 

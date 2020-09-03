@@ -19,4 +19,7 @@ patch 0011-Add-Murata-89359-dts.patch
 patch 0012-Add-Renesas-Patch.patch
 patch 0013-Disabled-rcar_sound_driver-to-Start-Kernel.patch
 patch 0014-Add-USB2.0-Support.patch
-patch 0015-Add-HDMI-Support.patch
+#patch 0015-Add-HDMI-Support.patch
+patch 0015-Add-DU-Support.patch
+patch 0016-Add-1920x720-Support.patch
+patch 0017-Add-Touch-Screen-Support.patch
