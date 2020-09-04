@@ -1,0 +1,521 @@
+From 001d23243f8ec9799da49b2a15516b9080f065ee Mon Sep 17 00:00:00 2001
+From: Fang Jiawei <fangjiawei1007@gmail.com>
+Date: Fri, 4 Sep 2020 03:28:34 +0000
+Subject: [PATCH] Fix Touch Screen Bug
+
+---
+ arch/arm64/boot/dts/renesas/x-zone-common.dtsi | 184 ++++++++++++-----------
+ drivers/input/touchscreen/bu21013_ts.c         | 195 +++++++------------------
+ 2 files changed, 143 insertions(+), 236 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/renesas/x-zone-common.dtsi b/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
+index ebf16a6..479e7ef 100644
+--- a/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
++++ b/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
+@@ -439,106 +439,104 @@
+ };
+ 
+ 
+-
+-
+-
+ &i2c4 {
+-	status = "okay";
+-	/*DS90UB925 -> 0x18*/
+-	/*DS90UB949 -> 0x34*/
+-/*
+-	pca9654: gpio@20 {
+-		compatible = "onnn,pca9654";
+-		reg = <0x20>;
+-		gpio-controller;
+-		#gpio-cells = <2>;
+-	};
+-
+-	csa_vdd: adc@7c {
+-		compatible = "maxim,max9611";
+-		reg = <0x7c>;
+-
+-		shunt-resistor-micro-ohms = <5000>;
+-	};
+-
+-	csa_dvfs: adc@7f {
+-		compatible = "maxim,max9611";
+-		reg = <0x7f>;
++ status = "okay";
++ /*DS90UB925 -> 0x18*/
++ /*DS90UB949 -> 0x34*/
++
++ clock-frequency = <400000>;
++
++     ti949@0x0c {
++                 compatible = "TI,TI949";
++                 reg = <0x0c>;
++               };
++
++        bu21013_tp@1a {
++                        compatible = "rohm,bu21013_tp";
++                        reg = <0x1a>;
++                        touch-gpio = <&gpio4 16 0x4>;
++                     //   reset-gpio = <&gpio4 9 1>;
++          //      avdd-supply = <&evm_3v3_sw>;
++                        rohm,touch-max-x = <1920>;
++                        rohm,touch-max-y = <720>;
++                        rohm,flip-y;
++                        };
+ 
+-		shunt-resistor-micro-ohms = <5000>;
+-	};
++/*
++ pca9654: gpio@20 {
++  compatible = "onnn,pca9654";
++  reg = <0x20>;
++  gpio-controller;
++  #gpio-cells = <2>;
++ };
++
++ csa_vdd: adc@7c {
++  compatible = "maxim,max9611";
++  reg = <0x7c>;
++
++  shunt-resistor-micro-ohms = <5000>;
++ };
++
++ csa_dvfs: adc@7f {
++  compatible = "maxim,max9611";
++  reg = <0x7f>;
++
++  shunt-resistor-micro-ohms = <5000>;
++ };
+ */
+-	ti949: ti949@0c{
+- 	        compatible = "TI,TI949";
+-		reg = <0x0c>; 	
+-	};
+-
+-	bu21013: bu21013_tp@1a{
+-		reg = <0x1a>;  
+-           	touch-gpio = <&gpio4 16 0x4>;  
+-           	reset-gpio = <&gpio4 15 1>;  
+-
+-           	rohm,touch-max-x = <1920>;  
+-          	rohm,touch-max-y = <720>;  
+-           	rohm,flip-y;  		
+-	};
+-
+-
+-
+-
+-	
+ /*
+-	video-receiver@70 {
+-		compatible = "adi,adv7482";
+-		reg = <0x70>;
+-
+-		#address-cells = <1>;
+-		#size-cells = <0>;
+-
+-		interrupt-parent = <&gpio6>;
+-		interrupt-names = "intrq1", "intrq2";
+-		interrupts = <30 IRQ_TYPE_LEVEL_LOW>,
+-			     <31 IRQ_TYPE_LEVEL_LOW>;
+-
+-		port@7 {
+-			reg = <7>;
+-
+-			adv7482_ain7: endpoint {
+-				remote-endpoint = <&cvbs_con>;
+-			};
+-		};
+-
+-		port@8 {
+-			reg = <8>;
+-
+-			adv7482_hdmi: endpoint {
+-				remote-endpoint = <&hdmi_in_con>;
+-			};
+-		};
+-
+-		port@a {
+-			reg = <10>;
+-
+-			adv7482_txa: endpoint {
+-				clock-lanes = <0>;
+-				data-lanes = <1 2 3 4>;
+-				remote-endpoint = <&csi40_in>;
+-			};
+-		};
+-
+-		port@b {
+-			reg = <11>;
+-
+-			adv7482_txb: endpoint {
+-				clock-lanes = <0>;
+-				data-lanes = <1>;
+-				remote-endpoint = <&csi20_in>;
+-			};
+-		};
+-	};
++ video-receiver@70 {
++  compatible = "adi,adv7482";
++  reg = <0x70>;
++
++  #address-cells = <1>;
++  #size-cells = <0>;
++
++  interrupt-parent = <&gpio6>;
++  interrupt-names = "intrq1", "intrq2";
++  interrupts = <30 IRQ_TYPE_LEVEL_LOW>,
++        <31 IRQ_TYPE_LEVEL_LOW>;
++
++  port@7 {
++   reg = <7>;
++
++   adv7482_ain7: endpoint {
++    remote-endpoint = <&cvbs_con>;
++   };
++  };
++
++  port@8 {
++   reg = <8>;
++
++   adv7482_hdmi: endpoint {
++    remote-endpoint = <&hdmi_in_con>;
++   };
++  };
++
++  port@a {
++   reg = <10>;
++
++   adv7482_txa: endpoint {
++    clock-lanes = <0>;
++    data-lanes = <1 2 3 4>;
++    remote-endpoint = <&csi40_in>;
++   };
++  };
++
++  port@b {
++   reg = <11>;
++
++   adv7482_txb: endpoint {
++    clock-lanes = <0>;
++    data-lanes = <1>;
++    remote-endpoint = <&csi20_in>;
++   };
++  };
++ };
+ */
+ };
+ 
++
+ &i2c5 {
+ 	pinctrl-0 = <&i2c5_pins>;
+ 	pinctrl-names = "default";
+diff --git a/drivers/input/touchscreen/bu21013_ts.c b/drivers/input/touchscreen/bu21013_ts.c
+index d6f425e..fc21f7a 100755
+--- a/drivers/input/touchscreen/bu21013_ts.c
++++ b/drivers/input/touchscreen/bu21013_ts.c
+@@ -31,11 +31,6 @@
+ //extern int test_notifier_call_chain(unsigned long val, void *v);
+ extern void clear_INTB(void);
+ 
+-static int ads_touch_data_get(const struct i2c_client *client, u8 command, u8 length, u8 *values);
+-//static int ads_do_multitouch_screen_report(struct bu21013_ts_data *data);
+-//static int ads_button_key_input_report(struct bu21013_ts_data *data, u8 *key_data);
+-
+-
+ 
+ /*********************************************/
+ #define PEN_DOWN_INTR	0
+@@ -156,7 +151,6 @@ static int ads_touch_data_get(const struct i2c_client *client, u8 command, u8 le
+ 
+ #define DRIVER_TP	"bu21013_tp"
+ 
+-
+ /**
+  * struct bu21013_ts_data - touch panel data structure
+  * @client: pointer to the i2c client
+@@ -746,110 +740,32 @@ static int ads_touch_key_input_report(struct bu21013_ts_data *data,u8 key_count,
+ }
+ 
+ 
+-static int TI949_read_bytes(const struct i2c_client * client, unsigned char * buf, int count){
+-	
+-	struct i2c_adapter* adapter = client->adapter;
+-	struct i2c_msg msg;
+-	int ret;
+-	msg.addr = client->addr;
+-	msg.flags = I2C_M_RD;
+-	msg.len = count;
+-	msg.buf = buf;
+-	
+-	ret = i2c_transfer(adapter, &msg,1);
+-
+-	return ret == 1?count:ret;
+-
+-}
+-
+-static u8 ads_interuppt_data_read_svw(struct i2c_client *client)
+-{
+-	struct i2c_adapter* adapter = client->adapter;
+-	struct i2c_msg msg;
+-	int ret;
+-	u8 rxbuf;
+-
+-	msg.addr = client->addr;
+-	msg.flags = I2C_M_RD;
+-	msg.len = 1;
+-	msg.buf = &rxbuf;
+-	
+-	ret = i2c_transfer(adapter,&msg, 1);
+-	if(ret < 0){
+-		printk("read err!\n");
+-	
+-	return rxbuf;
+-	
+-}
+-}
+-static int ads_interuppt_data_read(struct i2c_client *client,u16 len, u8 *val)
++static int ads_interuppt_data_read(struct i2c_client *client,u16 len, void *val)
+ {
+-	#if 1
+ 	struct 	i2c_msg xfer[1];
+ 	int 	ret;
+-	bool 	retry = false;
+-	int i;
+-	u8 rxbuf[1];
+-	
+-		/* Read data */
+-		xfer[0].addr  = client->addr;
+-		xfer[0].flags = I2C_M_RD;
+-		xfer[0].len   = 1;
+-		xfer[0].buf   = rxbuf;
+-		//printk("###svw_test###i2c_address = 0x%x###svw_test###\n",xfer[0].addr);
+-		ret = i2c_transfer(client->adapter,xfer,1);
+-		//*(val + i) = rxbuf[i];
+-		//printk("rxbuf[%d] = 0x%x\n",i,rxbuf[i]);//val[i]
+-	
+-	return rxbuf[0];
+-	#else
+-	struct  i2c_msg xfer[1];
+-	 int  ret;
+-
+-	 while (len > 0) {
+-	  /* Read data */
+-	  xfer[0].addr  = client->addr;
+-	  xfer[0].flags = I2C_M_RD;
+-	  xfer[0].len   = 1;
+-	  xfer[0].buf   = val;
+-
+-	  ret = i2c_transfer(client->adapter, xfer, ARRAY_SIZE(xfer));
+-	  if (ret != ARRAY_SIZE(xfer))
+-	   return -1;
+-
+-	  len -= 1;
+-	  val += 1;
+-	 }
+-	 
+-	 return 1;
+-#endif
++	bool 	retry = false;	
++	/* Read data */
++	xfer[0].addr  = client->addr;
++	xfer[0].flags = I2C_M_RD;
++	xfer[0].len   = len;
++	xfer[0].buf   = val;
++
++	return i2c_transfer(client->adapter, xfer, ARRAY_SIZE(xfer));
+ 
+ }
+ static int ads_data_read_handle(struct bu21013_ts_data *data)
+ {
+   	
+-   unsigned char rcv_data[50] ={0}; 
++   u8 rcv_data[50]; 
+    int i;
+-   int ret;
+-/*
+-	//ret = TI949_read_bytes(data->client, rcv_data, MT_1_2_DATA_LEN);
+-	printk("####svw##TI949_read_bytes = %d\n\n",ret);
+-    for(i = 0;i<50;i++){
+-   	printk("rcv_data[%d] = 0x%x\n",i,rcv_data[i]);
+-   }
+-*/
+-   #if 0
+-   ret = ads_interuppt_data_read(data->client,MT_1_2_DATA_LEN,rcv_data);
++   int ret =ads_interuppt_data_read(data->client,MT_1_2_DATA_LEN,rcv_data);
+    if(!ret)
+    	return -1;
+-	#else
+-	
+-   memset(rcv_data,0,MT_1_2_DATA_LEN);
+-	ret = ads_touch_data_get(data->client, MT_1_2_REG,MT_1_2_DATA_LEN,rcv_data);
+-	 for(i = 0;i<50;i++){
++
++   for(i = 0;i<50;i++){
+    	printk("rcv_data[%d] = 0x%x\n",i,rcv_data[i]);
+    }
+-   #endif
+    
+    if(MT_1_2_REG == rcv_data[0])
+    {
+@@ -1172,11 +1088,6 @@ static int ads_do_touch_screen_report(struct bu21013_ts_data *data)
+ 
+ 	memset(mt_data,0,MT_1_2_DATA_LEN);
+ 	ret = ads_touch_data_get(data->client, MT_1_2_REG,MT_1_2_DATA_LEN,mt_data);
+-	/*********************************
+-	for(i = 0;i<MT_1_2_DATA_LEN;i++){
+-		printk("mt_data[%d] = 0x%x\n",i,mt_data[i]);
+-	}
+-	/***********************************/
+ 	if(ret<0)
+ 		return ret;
+ 	
+@@ -1191,12 +1102,20 @@ static int ads_do_touch_screen_report(struct bu21013_ts_data *data)
+ 			key_data[0].pos_x = mt_data[4]*0xFF + mt_data[5];
+ 			key_data[0].pos_y = mt_data[6]*0xFF + mt_data[7];
+ 			key_data[0].status = mt_data[3];
+-	
++#ifdef FUNC_PRESSURE_MAJOR_VETOR		
++			key_data[0].area = mt_data[8];
++			key_data[0].pressure = mt_data[9];
++			key_data[0].vector = mt_data[10]; 
++#endif	
+ 			if(key_count > 1){
+ 			key_data[1].pos_x = mt_data[13]*0xFF + mt_data[14];
+ 			key_data[1].pos_y = mt_data[15]*0xFF + mt_data[16];
+ 			key_data[1].status = mt_data[12];
+-
++#ifdef FUNC_PRESSURE_MAJOR_VETOR		
++			key_data[1].area = mt_data[17];
++			key_data[1].pressure = mt_data[18];
++			key_data[1].vector = mt_data[19]; 
++#endif	
+ 			}
+ 
+ 	/*report touches fellows*/
+@@ -1213,7 +1132,11 @@ static int ads_do_touch_screen_report(struct bu21013_ts_data *data)
+ 								input_report_abs(data->in_dev, ABS_MT_POSITION_X,key_data[i].pos_x);
+ 								input_report_abs(data->in_dev, ABS_MT_POSITION_Y,key_data[i].pos_y);
+ 								
+-		
++#ifdef FUNC_PRESSURE_MAJOR_VETOR		
++								input_report_abs(data->in_dev, ABS_MT_TOUCH_MAJOR, key_data[i].area);		
++								input_report_abs(data->in_dev, ABS_MT_PRESSURE, key_data[i].pressure);
++								input_report_abs(data->in_dev, ABS_MT_ORIENTATION, key_data[i].vector);
++#endif		
+ 	
+                                 prev_key_status[i] = 1;
+                                 touch_sync=1;
+@@ -1227,7 +1150,11 @@ static int ads_do_touch_screen_report(struct bu21013_ts_data *data)
+ 								input_report_abs(data->in_dev, ABS_MT_POSITION_X,key_data[i].pos_x);
+ 								input_report_abs(data->in_dev, ABS_MT_POSITION_Y,key_data[i].pos_y);
+ 								
+-		
++#ifdef FUNC_PRESSURE_MAJOR_VETOR		
++								input_report_abs(data->in_dev, ABS_MT_TOUCH_MAJOR, key_data[i].area);		
++								input_report_abs(data->in_dev, ABS_MT_PRESSURE, key_data[i].pressure);
++								input_report_abs(data->in_dev, ABS_MT_ORIENTATION, key_data[i].vector);
++#endif		
+ 	
+                                 touch_sync=1;
+ 					}
+@@ -1269,32 +1196,6 @@ static int ads_do_touch_screen_report(struct bu21013_ts_data *data)
+ 		}
+ }
+ 
+-/*
+-add multitouch report 
+-*/
+-static int ads_do_multitouch_screen_report(struct bu21013_ts_data *data)
+-{
+-	u8 rcv_data[50];
+-	u8 ret;
+-	ret = ads_touch_data_get(data->client, MT_1_2_REG,MT_1_2_DATA_LEN,rcv_data);
+-	if(ret<0)
+-		return ret;
+-		
+-	int key_count = rcv_data[MT_FINGERS_NUM_POS]>5? 5: rcv_data[MT_FINGERS_NUM_POS] ;
+-	int key_data_raw[45];
+-	memcpy(key_data_raw,rcv_data+2,18);
+-
+-     if(key_count>2)
+-	 {	
+-	 	ads_touch_data_get(data->client,MT_OTHER_TOUCHES_REG,(key_count-2)*9+3,rcv_data);
+-		memcpy(key_data_raw,rcv_data+1,(key_count-2)*9);
+-	 }
+-	 return ads_touch_key_input_report(data,key_count,(u8*)key_data_raw); 
+-}
+-
+-/*
+-
+-*/
+ 
+ static int ads_do_touch_key_report(struct bu21013_ts_data *data)
+ {
+@@ -1375,9 +1276,7 @@ static irqreturn_t bu21013_gpio_irq(int irq, void *device_data)
+ 	//	printk("notifier_call_chain error\n");
+ 	/**********************************************************/
+ 
+-	//bu21013_do_touch_report(data);
+-	//ads_do_touch_screen_report(data);
+-	ads_do_multitouch_screen_report(data);
++	bu21013_do_touch_report(data);
+ 	clear_INTB();
+ 	
+ 	return IRQ_HANDLED;
+@@ -1660,15 +1559,15 @@ static int bu21013_probe(struct i2c_client *client,
+ 	init_waitqueue_head(&bu21013_data->wait);
+ 
+ 
+-    printk(KERN_ERR "TRK:[%s][%d] cs_pin[%d]\n",__FUNCTION__,__LINE__,pdata->cs_pin);
++   // printk(KERN_ERR "TRK:[%s][%d] cs_pin[%d]\n",__FUNCTION__,__LINE__,pdata->cs_pin);
+ 
+ 	/* configure the gpio pins */
+-	error = gpio_request_one(pdata->cs_pin, GPIOF_OUT_INIT_HIGH,
+-				 "touchp_reset");
+-	if (error < 0) {
+-		dev_err(&client->dev, "Unable to request gpio reset_pin\n");
+-		goto err_disable_regulator;
+-	}
++//	error = gpio_request_one(pdata->cs_pin, GPIOF_OUT_INIT_HIGH,
++//				 "touchp_reset");
++//	if (error < 0) {
++//		dev_err(&client->dev, "Unable to request gpio reset_pin\n");
++//		goto err_disable_regulator;
++//	}
+ 
+ 	/* configure the touch panel controller */
+ 	error = bu21013_init_chip(bu21013_data);
+@@ -1865,10 +1764,21 @@ static const struct i2c_device_id bu21013_id[] = {
+ };
+ MODULE_DEVICE_TABLE(i2c, bu21013_id);
+ 
++
++//const struct of_device_id of_bu21013_id[]={
++//	{		
++//		 compatible = "rohm,bu21013_tp",
++//	},
++//	{ /*nothing to be done*/ },
++//};*/
++
++
++
+ static struct i2c_driver bu21013_driver = {
+ 	.driver	= {
+ 		.name	=	DRIVER_TP,
+ 		.owner	=	THIS_MODULE,
++		//.of_match_table = of_match_ptr(of_bu21013_id),
+ #ifdef CONFIG_PM
+ 		.pm	=	&bu21013_dev_pm_ops,
+ #endif
+@@ -1879,7 +1789,6 @@ static struct i2c_driver bu21013_driver = {
+ };
+ 
+ 
+-
+ static int __init bu21013_driver_init(void)
+ {
+     return i2c_register_driver(THIS_MODULE,&bu21013_driver);
+-- 
+2.7.4
+
