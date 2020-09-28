@@ -24,3 +24,4 @@ patch 0015-Add-DU-Support.patch
 patch 0016-Add-1920x720-Support.patch
 patch 0017-Add-Touch-Screen-Support.patch
 patch 0018-Fix-Touch-Screen-Bug.patch
+patch 0019-Add-GPS-Serial-Support.patch

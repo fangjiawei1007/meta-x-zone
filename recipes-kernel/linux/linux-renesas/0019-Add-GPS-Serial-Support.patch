@@ -1,0 +1,89 @@
+From 3af00d785c4dcc64b4120853131bcf6cfd2817ff Mon Sep 17 00:00:00 2001
+From: Fang Jiawei <fangjiawei1007@gmail.com>
+Date: Mon, 28 Sep 2020 07:15:05 +0000
+Subject: [PATCH] Add GPS Serial Support.
+
+---
+ arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts | 16 ++++++++++++++++
+ arch/arm64/boot/dts/renesas/x-zone-common.dtsi | 11 +++++------
+ 2 files changed, 21 insertions(+), 6 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts b/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
+index 8d0b6b2..3fba40e 100644
+--- a/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
++++ b/arch/arm64/boot/dts/renesas/r8a7795-x-zone.dts
+@@ -251,6 +251,11 @@
+ 		groups = "can1_data";
+ 		function = "can1";	
+ 	};
++
++	scif0_pins: scif0_data{
++		groups = "scif0_data";
++		function = "scif0";
++	};
+ 	/*******************************/
+ };
+ 
+@@ -295,3 +300,14 @@
+         pinctrl-names = "default";
+         status = "okay";
+ };
++
++&scif0{
++	pinctrl-0 = <&scif0_pins>;
++	pinctrl-names = "default";
++	status = "okay";
++};
++
++
++
++
++
+diff --git a/arch/arm64/boot/dts/renesas/x-zone-common.dtsi b/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
+index 479e7ef..c8ca275 100644
+--- a/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
++++ b/arch/arm64/boot/dts/renesas/x-zone-common.dtsi
+@@ -34,6 +34,7 @@
+ 	aliases {
+ 		serial0 = &scif2;
+ 		serial1 = &scif1;
++		serial2 = &scif0;
+ //		ethernet0 = &avb;
+ 	};
+ 
+@@ -392,15 +393,13 @@
+ &extalr_clk {
+ 	clock-frequency = <32768>;
+ };
+-
++/*
+ &hscif1 {
+ 	pinctrl-0 = <&hscif1_pins>;
+ 	pinctrl-names = "default";
+ 
+-	/* Please use exclusively to the scif1 node */
+-	/* status = "okay"; */
+ };
+-
++*/
+ &hsusb {
+ 	dr_mode = "host";
+ 	status = "disabled";
+@@ -674,12 +673,12 @@
+ 		groups = "du_rgb888", "du_sync", "du_oddf", "du_clk_out_0";
+ 		function = "du";
+ 	};
+-
++/*
+ 	hscif1_pins: hscif1 {
+ 		groups = "hscif1_data_a", "hscif1_ctrl_a";
+ 		function = "hscif1";
+ 	};
+-
++*/
+ /*
+ 	i2c2_pins: i2c2 {
+ 		groups = "i2c2_a";
+-- 
+2.7.4
+
