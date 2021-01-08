@@ -1,0 +1,259 @@
+From fa73078296b80f007235928d48846f0569968c32 Mon Sep 17 00:00:00 2001
+From: Fang Jiawei <fangjiawei1007@gmail.com>
+Date: Thu, 17 Dec 2020 05:52:00 +0000
+Subject: [PATCH] U-boot Modified For X-Zone
+
+---
+ arch/arm/dts/r8a7795.dtsi         | 15 ++++++++-------
+ arch/arm/dts/r8a7796.dtsi         | 11 ++++++-----
+ arch/arm/dts/salvator-common.dtsi | 25 +++++++++++++++++--------
+ arch/arm/dts/salvator-x.dtsi      |  4 +++-
+ arch/arm/dts/salvator-xs.dtsi     |  3 ++-
+ 5 files changed, 36 insertions(+), 22 deletions(-)
+
+diff --git a/arch/arm/dts/r8a7795.dtsi b/arch/arm/dts/r8a7795.dtsi
+index c87eed7..c4674be 100644
+--- a/arch/arm/dts/r8a7795.dtsi
++++ b/arch/arm/dts/r8a7795.dtsi
+@@ -718,7 +718,7 @@
+ 			resets = <&cpg 704>;
+ 			status = "disabled";
+ 		};
+-
++/*
+ 		hsusb3: usb@e659c000 {
+ 			compatible = "renesas,usbhs-r8a7795",
+ 				     "renesas,rcar-gen3-usbhs";
+@@ -735,7 +735,7 @@
+ 			resets = <&cpg 705>;
+ 			status = "disabled";
+ 		};
+-
++*/
+ 		usb_dmac0: dma-controller@e65a0000 {
+ 			compatible = "renesas,r8a7795-usb-dmac",
+ 				     "renesas,usb-dmac";
+@@ -791,7 +791,7 @@
+ 			#dma-cells = <1>;
+ 			dma-channels = <2>;
+ 		};
+-
++/*
+ 		usb3_phy0: usb-phy@e65ee000 {
+ 			compatible = "renesas,r8a7795-usb3-phy",
+ 				     "renesas,rcar-gen3-usb3-phy";
+@@ -804,7 +804,7 @@
+ 			#phy-cells = <0>;
+ 			status = "disabled";
+ 		};
+-
++*/
+ 		dmac0: dma-controller@e6700000 {
+ 			compatible = "renesas,dmac-r8a7795",
+ 				     "renesas,rcar-dmac";
+@@ -2072,7 +2072,7 @@
+ 			       <&ipmmu_mp0 28>, <&ipmmu_mp0 29>,
+ 			       <&ipmmu_mp0 30>, <&ipmmu_mp0 31>;
+ 		};
+-
++/*
+ 		xhci0: usb@ee000000 {
+ 			compatible = "renesas,xhci-r8a7795", "renesas,rcar-gen3-xhci";
+ 			reg = <0 0xee000000 0 0xc00>;
+@@ -2093,7 +2093,7 @@
+ 			resets = <&cpg 328>;
+ 			status = "disabled";
+ 		};
+-
++*/
+ 		ohci0: usb@ee080000 {
+ 			compatible = "generic-ohci";
+ 			reg = <0 0xee080000 0 0x100>;
+@@ -2922,12 +2922,13 @@
+ 	};
+ 
+ 	/* External USB clocks - can be overridden by the board */
++/*
+ 	usb3s0_clk: usb3s0 {
+ 		compatible = "fixed-clock";
+ 		#clock-cells = <0>;
+ 		clock-frequency = <0>;
+ 	};
+-
++*/
+ 	usb_extal_clk: usb_extal {
+ 		compatible = "fixed-clock";
+ 		#clock-cells = <0>;
+diff --git a/arch/arm/dts/r8a7796.dtsi b/arch/arm/dts/r8a7796.dtsi
+index bf860f0..f5d5f67 100644
+--- a/arch/arm/dts/r8a7796.dtsi
++++ b/arch/arm/dts/r8a7796.dtsi
+@@ -716,7 +716,7 @@
+ 			#dma-cells = <1>;
+ 			dma-channels = <2>;
+ 		};
+-
++/*
+ 		usb3_phy0: usb-phy@e65ee000 {
+ 			compatible = "renesas,r8a7796-usb3-phy",
+ 				     "renesas,rcar-gen3-usb3-phy";
+@@ -729,7 +729,7 @@
+ 			#phy-cells = <0>;
+ 			status = "disabled";
+ 		};
+-
++*/
+ 		dmac0: dma-controller@e6700000 {
+ 			compatible = "renesas,dmac-r8a7796",
+ 				     "renesas,rcar-dmac";
+@@ -1954,7 +1954,7 @@
+ 			resets = <&cpg 328>;
+ 			status = "disabled";
+ 		};
+-
++/*
+ 		usb3_peri0: usb@ee020000 {
+ 			compatible = "renesas,r8a7796-usb3-peri",
+ 				     "renesas,rcar-gen3-usb3-peri";
+@@ -1965,7 +1965,7 @@
+ 			resets = <&cpg 328>;
+ 			status = "disabled";
+ 		};
+-
++*/
+ 		ohci0: usb@ee080000 {
+ 			compatible = "generic-ohci";
+ 			reg = <0 0xee080000 0 0x100>;
+@@ -2570,12 +2570,13 @@
+ 	};
+ 
+ 	/* External USB clocks - can be overridden by the board */
++/*
+ 	usb3s0_clk: usb3s0 {
+ 		compatible = "fixed-clock";
+ 		#clock-cells = <0>;
+ 		clock-frequency = <0>;
+ 	};
+-
++*/
+ 	usb_extal_clk: usb_extal {
+ 		compatible = "fixed-clock";
+ 		#clock-cells = <0>;
+diff --git a/arch/arm/dts/salvator-common.dtsi b/arch/arm/dts/salvator-common.dtsi
+index 7d3d866..22c1c87 100644
+--- a/arch/arm/dts/salvator-common.dtsi
++++ b/arch/arm/dts/salvator-common.dtsi
+@@ -267,10 +267,10 @@
+ &avb {
+ 	pinctrl-0 = <&avb_pins>;
+ 	pinctrl-names = "default";
+-	phy-handle = <&phy0>;
+-	phy-mode = "rgmii-txid";
++//	phy-handle = <&phy0>;
++	phy-mode = "rgmii";
+ 	status = "okay";
+-
++/*
+ 	phy0: ethernet-phy@0 {
+ 		rxc-skew-ps = <1500>;
+ 		reg = <0>;
+@@ -278,6 +278,12 @@
+ 		interrupts = <11 IRQ_TYPE_LEVEL_LOW>;
+ 		reset-gpios = <&gpio2 10 GPIO_ACTIVE_LOW>;
+ 	};
++*/
++
++	fixed-link {
++		speed = <100>;
++		full-duplex;
++	};
+ };
+ 
+ &csi20 {
+@@ -655,11 +661,12 @@
+ 			bias-pull-down;
+ 		};
+ 	};
+-
++/*
+ 	usb30_pins: usb30 {
+ 		groups = "usb30";
+ 		function = "usb30";
+ 	};
++*/
+ };
+ 
+ &pwm1 {
+@@ -734,7 +741,8 @@
+ };
+ 
+ &scif_clk {
+-	clock-frequency = <14745600>;
++//	clock-frequency = <14745600>;
++	clock-frequency = <14745400>;
+ };
+ 
+ &sdhi0 {
+@@ -802,7 +810,7 @@
+ 
+ 	status = "okay";
+ };
+-
++/*
+ &usb3_peri0 {
+ 	phys = <&usb3_phy0>;
+ 	phy-names = "usb";
+@@ -817,7 +825,7 @@
+ &usb3s0_clk {
+ 	clock-frequency = <100000000>;
+ };
+-
++*/
+ &vin0 {
+ 	status = "okay";
+ };
+@@ -854,10 +862,11 @@
+ 	timeout-sec = <60>;
+ 	status = "okay";
+ };
+-
++/*
+ &xhci0 {
+ 	pinctrl-0 = <&usb30_pins>;
+ 	pinctrl-names = "default";
+ 
+ 	status = "okay";
+ };
++*/
+diff --git a/arch/arm/dts/salvator-x.dtsi b/arch/arm/dts/salvator-x.dtsi
+index ddee50e..d5e8c50 100644
+--- a/arch/arm/dts/salvator-x.dtsi
++++ b/arch/arm/dts/salvator-x.dtsi
+@@ -13,7 +13,9 @@
+ };
+ 
+ &extal_clk {
+-	clock-frequency = <16666666>;
++//	clock-frequency = <16666666>;
++	clock-frequency = <25000000>;
++
+ };
+ 
+ &i2c4 {
+diff --git a/arch/arm/dts/salvator-xs.dtsi b/arch/arm/dts/salvator-xs.dtsi
+index 976e372..30a965a 100644
+--- a/arch/arm/dts/salvator-xs.dtsi
++++ b/arch/arm/dts/salvator-xs.dtsi
+@@ -12,7 +12,8 @@
+ };
+ 
+ &extal_clk {
+-	clock-frequency = <16640000>;
++//	clock-frequency = <16640000>;
++	clock-frequency = <25000000>;
+ };
+ 
+ &i2c4 {
+-- 
+2.7.4
+
